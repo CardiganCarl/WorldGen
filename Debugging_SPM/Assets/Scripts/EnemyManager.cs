@@ -32,8 +32,6 @@ public class EnemyManager : MonoBehaviour
     private NativeArray<RaycastCommand> raycastCommands;
     private NativeArray<RaycastHit> raycastHits;
 
-    private int maxRays = 21 * 500;
-
     private float enemyHeight;
     private float enemyRadius;
 
