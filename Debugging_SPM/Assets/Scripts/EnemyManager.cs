@@ -10,6 +10,7 @@ using UnityEngine;
 using UnityEngine.Jobs;
 using UnityEngine.Profiling;
 
+[BurstCompile]
 public class EnemyManager : MonoBehaviour
 {
     public float movementSpeed = 5.0f;
@@ -29,6 +30,7 @@ public class EnemyManager : MonoBehaviour
     private Transform playerTransform;
 
     private Transform[] enemyTransforms;
+    private TransformAccessArray enemiesAccessArray;
 
     private NativeArray<RaycastCommand> raycastCommands;
     private NativeArray<RaycastHit> raycastHits;
@@ -55,6 +57,8 @@ public class EnemyManager : MonoBehaviour
         movementVectors = new Vector3[500];
 
         tracesPerEnemy = new Dictionary<int, int>();
+        
+        enemiesAccessArray = new TransformAccessArray(enemyTransforms);
     }
 
     private void Start()
@@ -96,10 +100,20 @@ public class EnemyManager : MonoBehaviour
                 // Apply movement.
                 t.forward = Vector3.Lerp(t.forward, movementVector.normalized, Time.deltaTime * rotationSpeed);
                 t.position += t.forward * movementSpeed * Time.deltaTime;
+                
+                ResolveCollisions(t);
             }
 
-            ResolveCollisions(t);
+            // ResolveCollisions(t);
         }
+        // var job = new CheckCollisionsJob
+        // {
+        //     EnemyHeight = enemyHeight,
+        //     EnemyRadius = enemyRadius
+        // };
+        //     
+        // JobHandle jobHandle = job.Schedule(enemiesAccessArray);
+        // jobHandle.Complete();
     }
 
     // Add raycasts to batch job for this frame.
@@ -343,5 +357,37 @@ public class EnemyManager : MonoBehaviour
         //        }
         //    }
         //}
+    }
+}
+
+[BurstCompile]
+struct CheckCollisionsJob : IJobParallelForTransform
+{
+    [ReadOnly] public float EnemyHeight;
+    [ReadOnly] public float EnemyRadius;
+    public void Execute(int index, TransformAccess transform)
+    {
+        // List<Collider> colliders = Physics.OverlapCapsule(
+        //         transform.position + EnemyHeight * 0.5f * Vector3.up,
+        //         transform.position - EnemyHeight * 0.5f * Vector3.up,
+        //         EnemyRadius)
+        //     .Where(c => c.transform != transform)
+        //     .ToList();
+        //
+        // if (colliders.Count > 0)
+        // {
+        //     if (Physics.ComputePenetration(
+        //             transform.gameObject.GetComponent<CapsuleCollider>(),
+        //             transform.position,
+        //             transform.rotation,
+        //             colliders[0],
+        //             colliders[0].transform.position,
+        //             colliders[0].transform.rotation,
+        //             out Vector3 direction,
+        //             out float distance))
+        //     {
+        //         transform.position += direction * distance;
+        //     }
+        // }
     }
 }
