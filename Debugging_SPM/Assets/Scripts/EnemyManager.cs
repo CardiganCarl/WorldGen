@@ -8,6 +8,7 @@ using Unity.Mathematics;
 using UnityEditor.Experimental.GraphView;
 using UnityEngine;
 using UnityEngine.Jobs;
+using UnityEngine.Profiling;
 
 public class EnemyManager : MonoBehaviour
 {
@@ -75,6 +76,7 @@ public class EnemyManager : MonoBehaviour
         for (int i = 0; i < 500; i++)
         {
             ScheduleRaycasts(enemyTransforms[i], i);
+            // CalculateMovementVector(enemyTransforms[i], i);
         }
         
         // Create a job from all the raycasts.
@@ -88,6 +90,7 @@ public class EnemyManager : MonoBehaviour
             t = enemyTransforms[i];
             movementVectors[i] = CalculateMovement(t, i);
             Vector3 movementVector = movementVectors[i];
+            // Vector3 movementVector = CalculateMovementVector(t, i);
             if (movementVector != Vector3.zero)
             {
                 // Apply movement.
@@ -217,33 +220,33 @@ public class EnemyManager : MonoBehaviour
             
             raycastCommands[enemyIndex] = new RaycastCommand(t.position, direction, QueryParameters.Default);
             
-            // if (Physics.Raycast(t.position, direction, out RaycastHit hitInfo, sight))
-            // {
-            //     movementVector += direction * hitInfo.distance;
-            //
-            //     if (debugDraw)
-            //     {
-            //         Debug.DrawLine(t.position, t.position + direction * hitInfo.distance);
-            //
-            //         Vector3 Perp = Vector3.Cross(direction, Vector3.up);
-            //         Debug.DrawLine(hitInfo.point + Perp, hitInfo.point - Perp, Color.red);
-            //     }
-            //
-            //     if (hitInfo.transform.gameObject.CompareTag("Player"))
-            //     {
-            //         movementVector = direction;
-            //         break;
-            //     }
-            // }
-            // else
-            // {
-            //     movementVector += direction * sight;
-            //
-            //     if (debugDraw)
-            //     {
-            //         Debug.DrawLine(transform.position, transform.position + direction * sight);
-            //     }
-            // }
+            if (Physics.Raycast(t.position, direction, out RaycastHit hitInfo, sight))
+            {
+                movementVector += direction * hitInfo.distance;
+            
+                if (debugDraw)
+                {
+                    Debug.DrawLine(t.position, t.position + direction * hitInfo.distance);
+            
+                    Vector3 Perp = Vector3.Cross(direction, Vector3.up);
+                    Debug.DrawLine(hitInfo.point + Perp, hitInfo.point - Perp, Color.red);
+                }
+            
+                if (hitInfo.transform.gameObject.CompareTag("Player"))
+                {
+                    movementVector = direction;
+                    break;
+                }
+            }
+            else
+            {
+                movementVector += direction * sight;
+            
+                if (debugDraw)
+                {
+                    Debug.DrawLine(transform.position, transform.position + direction * sight);
+                }
+            }
 
             // ControlEnemyJob job = new ControlEnemyJob()
             // {
