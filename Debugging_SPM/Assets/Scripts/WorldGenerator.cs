@@ -1,7 +1,15 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
+using Unity.Jobs;
+using Unity.Collections;
 using UnityEngine;
+using UnityEngine.Jobs;
+using Unity.Burst;
+using Unity.Mathematics;
+using Random = UnityEngine.Random;
 
+[BurstCompile]
 public class WorldGenerator : MonoBehaviour
 {
     [Header("World")]
@@ -21,6 +29,12 @@ public class WorldGenerator : MonoBehaviour
 
     GameObject walls;
     Mesh wallMesh;
+    
+    // private Transform[] wallTransforms;
+    private NativeArray<float> samples;
+    private NativeArray<float3> positions;
+    private NativeArray<float3> scales;
+    
     void Awake()
     {
         PlaceAI();
@@ -31,10 +45,23 @@ public class WorldGenerator : MonoBehaviour
     {
         walls = GameObject.CreatePrimitive(PrimitiveType.Cube);
         wallMesh = walls.GetComponent<MeshFilter>().sharedMesh;
-
+        samples = new NativeArray<float>(height * width, Allocator.Persistent);
+        positions = new NativeArray<float3>(height * width, Allocator.Persistent);
+        scales = new NativeArray<float3>(height * width, Allocator.Persistent);
+        
         // Log execution time.
         var stopwatch = new System.Diagnostics.Stopwatch();
         stopwatch.Start();
+        
+        // wallTransforms = new Transform[height * width];
+        for (int i = 0; i < height; i++)
+        {
+            for (int j = 0; j < width; j++)
+            {
+                // wallTransforms[i * width + j] = walls.GetComponent<Transform>();
+                samples[i * width + j] = Mathf.PerlinNoise((float)j / width * noiseScale, (float)i / height * noiseScale);
+            }
+        }
 
         // NOTE: Clean up previous world so we don't double up.
         while (transform.childCount > 0)
@@ -43,7 +70,6 @@ public class WorldGenerator : MonoBehaviour
         }
 
         // Create ground plane.
-
         GameObject plane = GameObject.CreatePrimitive(PrimitiveType.Plane);
         // NOTE: Planes are scaled 10x.
         plane.transform.localScale = new Vector3(width, 10.0f, height) * 0.1f;
@@ -56,35 +82,37 @@ public class WorldGenerator : MonoBehaviour
         List<CombineInstance> meshes = new List<CombineInstance>();
 
         // Create obstacles/geometry.
-        for (int y = 0; y < height; y++)
+        GenerateWallsJob job = new GenerateWallsJob
         {
-            for (int x = 0; x < width; x++)
+            Samples = samples,
+            Positions = positions,
+            Scales = scales,
+            Width = width,
+            PercentageBlocks = percentageBlocks,
+        };
+        JobHandle handle = job.Schedule(width * height, 64);
+        handle.Complete();
+        
+        for (int i = 0; i < height; i++)
+        {
+            for (int j = 0; j < width; j++)
             {
-                float sample = 0.0f;
-                // NOTE: Add a solid border and generate inside with perlin noise.
-                if (x > 0 && y > 0 && x < width - 1 && y < height - 1)
+                if (samples[i * width + j] >= percentageBlocks)
                 {
-                    sample = Mathf.PerlinNoise((float)x / width * noiseScale, (float)y / height * noiseScale);
+                    continue;
                 }
-
-                if (sample < percentageBlocks)
-                {
-                    // NOTE: Larger noice gives higher blocks.
-                    float obstacleHeight = 3.0f - sample * 2.0f;
-
-                    walls.transform.position = new Vector3(x, obstacleHeight * 0.5f, y);
-                    walls.transform.localScale = new Vector3(1.0f, obstacleHeight, 1.0f);
-
-                    walls.isStatic = true;
-
-                    // Sets the values for one of the meshes.
-                    CombineInstance instance = new CombineInstance();
-                    instance.mesh = wallMesh;
-                    instance.transform = walls.transform.localToWorldMatrix;
-                    meshes.Add(instance);
-                }
+                
+                CombineInstance ci = new CombineInstance();
+                ci.mesh = wallMesh;
+                Matrix4x4 matrix = Matrix4x4.TRS(positions[i * width + j], Quaternion.identity, scales[i * width + j]);
+                ci.transform = matrix;
+                meshes.Add(ci);
             }
         }
+        
+        positions.Dispose();
+        scales.Dispose();
+        samples.Dispose();
 
         // Combine all meshes into one.
         mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
@@ -101,10 +129,37 @@ public class WorldGenerator : MonoBehaviour
         // Add mesh collider.
         DestroyImmediate(walls.GetComponent<BoxCollider>());
         walls.AddComponent<MeshCollider>();
-
+        
         // Logging 
         stopwatch.Stop();
         Debug.LogFormat("[WorldGenerator::BuildWorld] Execution time: {0}ms", stopwatch.ElapsedMilliseconds);
+    }
+
+    [BurstCompile]
+    struct GenerateWallsJob : IJobParallelFor
+    {
+        [ReadOnly] private float x;
+        [ReadOnly] private float y;
+        [ReadOnly] public NativeArray<float> Samples;
+        public NativeArray<float3> Positions;
+        public NativeArray<float3> Scales;
+        [ReadOnly] public float Width;
+        [ReadOnly] public float PercentageBlocks;
+        public void Execute(int index)
+        {
+            x = index % Width;
+            y = index / Width;
+            
+            float sample = Samples[index];
+            if (sample < PercentageBlocks)
+            {
+                // NOTE: Larger noice gives higher blocks.
+                float obstacleHeight = 3.0f - sample * 2.0f;
+
+                Positions[index] = new Vector3(x, obstacleHeight * 0.5f, y);
+                Scales[index] = new Vector3(1.0f, obstacleHeight, 1.0f);
+            }
+        }
     }
 
     void PlaceAI()
