@@ -26,11 +26,9 @@ public class EnemyManager : MonoBehaviour
 
     public bool debugDraw = false;
 
-    private HashSet<Transform> enemies;
     private Transform playerTransform;
 
     private Transform[] enemyTransforms;
-    private TransformAccessArray enemiesAccessArray;
 
     private NativeArray<RaycastCommand> raycastCommands;
     private NativeArray<RaycastHit> raycastHits;
@@ -38,8 +36,7 @@ public class EnemyManager : MonoBehaviour
     private float enemyHeight;
     private float enemyRadius;
 
-    //private JobHandle jobHandle;
-    //private QueryParameters queryParameters;
+    private int numAI;
 
     private Camera mainCamera;
 
@@ -49,24 +46,21 @@ public class EnemyManager : MonoBehaviour
 
     private void Awake()
     {
-        raycastCommands = new NativeArray<RaycastCommand>(maxTraces * 500, Allocator.Persistent);
-        raycastHits = new NativeArray<RaycastHit>(maxTraces * 500, Allocator.Persistent);
-        enemyTransforms = new Transform[500];
+        numAI = GameObject.Find("WorldGenerator").GetComponent<WorldGenerator>().numAI;
+        raycastCommands = new NativeArray<RaycastCommand>(maxTraces * numAI, Allocator.Persistent);
+        raycastHits = new NativeArray<RaycastHit>(maxTraces * numAI, Allocator.Persistent);
+        enemyTransforms = new Transform[numAI];
         mainCamera = Camera.main;
         
-        movementVectors = new Vector3[500];
+        movementVectors = new Vector3[numAI];
 
         tracesPerEnemy = new Dictionary<int, int>();
-        
-        enemiesAccessArray = new TransformAccessArray(enemyTransforms);
     }
 
     private void Start()
     {
         GameObject[] enemyObjects = GameObject.FindGameObjectsWithTag("Enemy");
-        enemies = enemyObjects.Select(obj => obj.transform).ToHashSet();
-        // Need to fix this.
-        enemyTransforms = enemies.ToArray();
+        enemyTransforms = enemyObjects.Select(obj => obj.transform).ToArray();
 
         playerTransform = GameObject.Find("Player").GetComponent<Transform>();
 
@@ -77,7 +71,7 @@ public class EnemyManager : MonoBehaviour
     void Update()
     {
         // Add raycasts to batch for each enemy.
-        for (int i = 0; i < 500; i++)
+        for (int i = 0; i < numAI; i++)
         {
             ScheduleRaycasts(enemyTransforms[i], i);
             // CalculateMovementVector(enemyTransforms[i], i);
@@ -89,31 +83,21 @@ public class EnemyManager : MonoBehaviour
 
         // Apply movement based on the raycast commands for each enemy.
         Transform t;
-        for (int i = 0; i < 500; i++)
+        for (int i = 0; i < numAI; i++)
         {
             t = enemyTransforms[i];
             movementVectors[i] = CalculateMovement(t, i);
             Vector3 movementVector = movementVectors[i];
-            // Vector3 movementVector = CalculateMovementVector(t, i);
             if (movementVector != Vector3.zero)
             {
                 // Apply movement.
                 t.forward = Vector3.Lerp(t.forward, movementVector.normalized, Time.deltaTime * rotationSpeed);
                 t.position += t.forward * movementSpeed * Time.deltaTime;
                 
+                // Only resolve collisions for enemies that have moved.
                 ResolveCollisions(t);
             }
-
-            // ResolveCollisions(t);
         }
-        // var job = new CheckCollisionsJob
-        // {
-        //     EnemyHeight = enemyHeight,
-        //     EnemyRadius = enemyRadius
-        // };
-        //     
-        // JobHandle jobHandle = job.Schedule(enemiesAccessArray);
-        // jobHandle.Complete();
     }
 
     // Add raycasts to batch job for this frame.
