@@ -52,16 +52,6 @@ public class WorldGenerator : MonoBehaviour
         // Log execution time.
         var stopwatch = new System.Diagnostics.Stopwatch();
         stopwatch.Start();
-        
-        // wallTransforms = new Transform[height * width];
-        for (int i = 0; i < height; i++)
-        {
-            for (int j = 0; j < width; j++)
-            {
-                // wallTransforms[i * width + j] = walls.GetComponent<Transform>();
-                samples[i * width + j] = Mathf.PerlinNoise((float)j / width * noiseScale, (float)i / height * noiseScale);
-            }
-        }
 
         // NOTE: Clean up previous world so we don't double up.
         while (transform.childCount > 0)
@@ -88,6 +78,8 @@ public class WorldGenerator : MonoBehaviour
             Positions = positions,
             Scales = scales,
             Width = width,
+            Height = height,
+            NoiseScale = noiseScale,
             PercentageBlocks = percentageBlocks,
         };
         JobHandle handle = job.Schedule(width * height, 64);
@@ -140,20 +132,23 @@ public class WorldGenerator : MonoBehaviour
     {
         [ReadOnly] private float x;
         [ReadOnly] private float y;
-        [ReadOnly] public NativeArray<float> Samples;
+        public NativeArray<float> Samples;
         public NativeArray<float3> Positions;
         public NativeArray<float3> Scales;
         [ReadOnly] public float Width;
+        [ReadOnly] public float Height;
+        [ReadOnly] public float NoiseScale;
         [ReadOnly] public float PercentageBlocks;
         public void Execute(int index)
         {
             x = index % Width;
             y = index / Width;
             
-            float sample = Samples[index];
+            float sample = PerlinNoise.CalculateNoise((float)x / Width * NoiseScale, (float)y / Height * NoiseScale);
+            Samples[index] = sample;
             if (sample < PercentageBlocks)
             {
-                // NOTE: Larger noice gives higher blocks.
+                // NOTE: Larger noise gives higher blocks.
                 float obstacleHeight = 3.0f - sample * 2.0f;
 
                 Positions[index] = new Vector3(x, obstacleHeight * 0.5f, y);
