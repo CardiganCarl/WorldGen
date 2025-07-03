@@ -43,9 +43,109 @@ public class WorldGenerator : MonoBehaviour
         PlaceAI();
     }
 
+    [ContextMenu("Generate Terrain")]
+    public void GenerateTerrain()
+    { 
+        DestroyWorld();
+        GameObject plane = CreatePlane();
+        
+        NativeArray<float3> points = new NativeArray<float3>((width + 1) * (height + 1), Allocator.TempJob);
+        
+        GeneratePointsJob generatePointsJob = new GeneratePointsJob()
+        {
+            Points = points,
+            Width = width,
+            NoiseScale = noiseScale,
+        };
+        JobHandle handle = generatePointsJob.Schedule(points.Length, 64);
+        handle.Complete();
+
+        Vector3[] vertices = new Vector3[points.Length];
+        for (int i = 0; i < vertices.Length; i++)
+        { 
+            vertices[i] = points[i];   
+        }
+        
+        int[] triangles = new int[width * height * 6];
+        
+        int vert = 0;
+        int tris = 0;
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                triangles[tris + 0] = vert + 0;
+                triangles[tris + 1] = vert + width + 1;
+                triangles[tris + 2] = vert + 1;
+                triangles[tris + 3] = vert + 1;
+                triangles[tris + 4] = vert + width + 1;
+                triangles[tris + 5] = vert + width + 2;
+
+                vert++;
+                tris += 6;
+            }
+
+            vert++;
+        }
+        
+        Mesh mesh = new Mesh();
+        mesh.vertices = vertices;
+        mesh.triangles = triangles;
+        mesh.RecalculateBounds();
+        mesh.RecalculateNormals();
+        
+        plane.GetComponent<MeshFilter>().mesh = mesh;
+        
+        points.Dispose();
+    }
+
+    [BurstCompile]
+    struct GeneratePointsJob : IJobParallelFor
+    {
+        public NativeArray<float3> Points;
+        [ReadOnly] public float Width;
+        [ReadOnly] public float NoiseScale;
+        
+        public void Execute(int index)
+        {
+            float x = index % (Width + 1);
+            float y = index / (Width + 1);
+            // Points[index] = new float3(x, PerlinNoise.CalculateNoise((float)x / Width * NoiseScale, (float)y / Height * NoiseScale), y);
+            Points[index] = new float3(x, PerlinNoise.CalculateNoise(x, y) * NoiseScale, y);
+        }
+    }
+
+    [ContextMenu("Destroy World")]
+    public void DestroyWorld()
+    {
+        while (transform.childCount > 0)
+        {
+            DestroyImmediate(transform.GetChild(0).gameObject);
+        }
+    }
+
+    private GameObject CreatePlane()
+    {
+        // Create ground plane.
+        GameObject plane = GameObject.CreatePrimitive(PrimitiveType.Plane);
+        // NOTE: Planes are scaled 10x.
+        plane.transform.localScale = new Vector3(width, 10.0f, height) * 0.1f;
+        // NOTE: Origo of a plane is in the middle. Move lower left corner to zero.
+        plane.transform.position = new Vector3(width * 0.5f - 0.5f, 0.0f, height * 0.5f - 0.5f);
+        plane.GetComponent<Renderer>().material = planeMaterial;
+        plane.transform.SetParent(transform);
+        
+        return plane;
+    }
+
     [ContextMenu("Generate New World")]
     public void BuildWorld()
     {
+        // Log execution time.
+        var stopwatch = new System.Diagnostics.Stopwatch();
+        stopwatch.Start();
+        
         // walls = GameObject.CreatePrimitive(PrimitiveType.Cube);
         GameObject temp = GameObject.CreatePrimitive(PrimitiveType.Cube);
         wallMesh = temp.GetComponent<MeshFilter>().sharedMesh;
@@ -55,25 +155,9 @@ public class WorldGenerator : MonoBehaviour
         scales = new NativeArray<float3>(height * width, Allocator.Persistent);
 
         chunkSize = width / chunks;
-        
-        // Log execution time.
-        var stopwatch = new System.Diagnostics.Stopwatch();
-        stopwatch.Start();
 
-        // NOTE: Clean up previous world so we don't double up.
-        while (transform.childCount > 0)
-        {
-            DestroyImmediate(transform.GetChild(0).gameObject);
-        }
-
-        // Create ground plane.
-        GameObject plane = GameObject.CreatePrimitive(PrimitiveType.Plane);
-        // NOTE: Planes are scaled 10x.
-        plane.transform.localScale = new Vector3(width, 10.0f, height) * 0.1f;
-        // NOTE: Origo of a plane is in the middle. Move lower left corner to zero.
-        plane.transform.position = new Vector3(width * 0.5f - 0.5f, 0.0f, height * 0.5f - 0.5f);
-        plane.GetComponent<Renderer>().material = planeMaterial;
-        plane.transform.SetParent(transform);
+        DestroyWorld();
+        CreatePlane();
         
         List<CombineInstance> meshes = new List<CombineInstance>();
 
@@ -95,6 +179,7 @@ public class WorldGenerator : MonoBehaviour
         {
             for (int j = 0; j < width; j++)
             {
+                // Add a new mesh to the chunk.
                 if (samples[i * width + j] < percentageBlocks)
                 {
                     CombineInstance ci = new CombineInstance();
@@ -104,6 +189,7 @@ public class WorldGenerator : MonoBehaviour
                     meshes.Add(ci);
                 }
 
+                // Create new chunk by combining meshes.
                 if (j == i && (j + 1) % chunkSize == 0 && (i + 1) % chunkSize == 0)
                 {
                     Mesh mesh = new Mesh();
