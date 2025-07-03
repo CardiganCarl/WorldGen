@@ -15,6 +15,7 @@ public class WorldGenerator : MonoBehaviour
     [Header("World")]
     public int width = 200;
     public int height = 200;
+    public int chunks = 4;
     public float percentageBlocks = 0.35f;
     public float noiseScale = 15.0f;
 
@@ -27,13 +28,15 @@ public class WorldGenerator : MonoBehaviour
     public GameObject AIPrefab;
     public int numAI = 500;
 
-    GameObject walls;
+    // GameObject walls;
     Mesh wallMesh;
     
     // private Transform[] wallTransforms;
     private NativeArray<float> samples;
     private NativeArray<float3> positions;
     private NativeArray<float3> scales;
+
+    private int chunkSize;
     
     void Awake()
     {
@@ -43,11 +46,15 @@ public class WorldGenerator : MonoBehaviour
     [ContextMenu("Generate New World")]
     public void BuildWorld()
     {
-        walls = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        wallMesh = walls.GetComponent<MeshFilter>().sharedMesh;
+        // walls = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        GameObject temp = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        wallMesh = temp.GetComponent<MeshFilter>().sharedMesh;
+        DestroyImmediate(temp);
         samples = new NativeArray<float>(height * width, Allocator.Persistent);
         positions = new NativeArray<float3>(height * width, Allocator.Persistent);
         scales = new NativeArray<float3>(height * width, Allocator.Persistent);
+
+        chunkSize = width / chunks;
         
         // Log execution time.
         var stopwatch = new System.Diagnostics.Stopwatch();
@@ -67,8 +74,7 @@ public class WorldGenerator : MonoBehaviour
         plane.transform.position = new Vector3(width * 0.5f - 0.5f, 0.0f, height * 0.5f - 0.5f);
         plane.GetComponent<Renderer>().material = planeMaterial;
         plane.transform.SetParent(transform);
-
-        Mesh mesh = new Mesh();
+        
         List<CombineInstance> meshes = new List<CombineInstance>();
 
         // Create obstacles/geometry.
@@ -89,16 +95,34 @@ public class WorldGenerator : MonoBehaviour
         {
             for (int j = 0; j < width; j++)
             {
-                if (samples[i * width + j] >= percentageBlocks)
+                if (samples[i * width + j] < percentageBlocks)
                 {
-                    continue;
+                    CombineInstance ci = new CombineInstance();
+                    ci.mesh = wallMesh;
+                    Matrix4x4 matrix = Matrix4x4.TRS(positions[i * width + j], Quaternion.identity, scales[i * width + j]);
+                    ci.transform = matrix;
+                    meshes.Add(ci);
                 }
-                
-                CombineInstance ci = new CombineInstance();
-                ci.mesh = wallMesh;
-                Matrix4x4 matrix = Matrix4x4.TRS(positions[i * width + j], Quaternion.identity, scales[i * width + j]);
-                ci.transform = matrix;
-                meshes.Add(ci);
+
+                if (j == i && (j + 1) % chunkSize == 0 && (i + 1) % chunkSize == 0)
+                {
+                    Mesh mesh = new Mesh();
+                    mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+                    mesh.CombineMeshes(meshes.ToArray());
+                    meshes.Clear();
+                    
+                    GameObject walls = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    walls.GetComponent<MeshFilter>().mesh = mesh;
+                    
+                    walls.isStatic = true;
+                    walls.GetComponent<Renderer>().material = obstacleMaterial;
+                    
+                    walls.transform.SetParent(transform);
+                    walls.transform.position = Vector3.zero;
+                    
+                    DestroyImmediate(walls.GetComponent<BoxCollider>());
+                    walls.AddComponent<MeshCollider>();
+                }
             }
         }
         
@@ -106,22 +130,6 @@ public class WorldGenerator : MonoBehaviour
         scales.Dispose();
         samples.Dispose();
 
-        // Combine all meshes into one.
-        mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-        mesh.CombineMeshes(meshes.ToArray());
-        walls.GetComponent<MeshFilter>().mesh = mesh;
-
-        // Set all walls to static.
-        walls.isStatic = true;
-        walls.GetComponent<Renderer>().material = obstacleMaterial;
-
-        walls.transform.SetParent(transform);
-        walls.transform.position = Vector3.zero;
-
-        // Add mesh collider.
-        DestroyImmediate(walls.GetComponent<BoxCollider>());
-        walls.AddComponent<MeshCollider>();
-        
         // Logging 
         stopwatch.Stop();
         Debug.LogFormat("[WorldGenerator::BuildWorld] Execution time: {0}ms", stopwatch.ElapsedMilliseconds);
