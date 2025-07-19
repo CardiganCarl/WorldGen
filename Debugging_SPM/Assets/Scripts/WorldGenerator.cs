@@ -17,7 +17,13 @@ public class WorldGenerator : MonoBehaviour
     public int height = 200;
     public int chunks = 4;
     public float percentageBlocks = 0.35f;
-    public float noiseScale = 15.0f;
+	public int subDivisions = 200;
+    
+    [Header("Noise")]
+    public float amplitude = 15.0f;
+    public float frequency = 1.0f;
+    public float noiseScale = 0.5f;
+    public int octaves = 4;
 
     [Header("Materials")]
     public Material planeMaterial;
@@ -46,16 +52,27 @@ public class WorldGenerator : MonoBehaviour
     [ContextMenu("Generate Terrain")]
     public void GenerateTerrain()
     { 
+        // Log execution time.
+        var stopwatch = new System.Diagnostics.Stopwatch();
+        stopwatch.Start();
+        
         DestroyWorld();
         GameObject plane = CreatePlane();
+
+		int xAmount = width * subDivisions;
+		int yAmount = height * subDivisions;
         
-        NativeArray<float3> points = new NativeArray<float3>((width + 1) * (height + 1), Allocator.TempJob);
+        NativeArray<float3> points = new NativeArray<float3>((xAmount + 1) * (yAmount + 1), Allocator.TempJob);
         
-        GeneratePointsJob generatePointsJob = new GeneratePointsJob()
+        GenerateHeightJob generatePointsJob = new GenerateHeightJob()
         {
             Points = points,
-            Width = width,
+            Amplitude = amplitude,
+            Frequency = frequency,
             NoiseScale = noiseScale,
+            Octaves = octaves,
+            XAmount = xAmount,
+            YAmount = yAmount,
         };
         JobHandle handle = generatePointsJob.Schedule(points.Length, 64);
         handle.Complete();
@@ -66,14 +83,14 @@ public class WorldGenerator : MonoBehaviour
             vertices[i] = points[i];   
         }
         
-        int[] triangles = new int[width * height * 6];
+        int[] triangles = new int[xAmount * yAmount * 6];
         
         int vert = 0;
         int tris = 0;
 
-        for (int y = 0; y < height; y++)
+        for (int y = 0; y < xAmount; y++)
         {
-            for (int x = 0; x < width; x++)
+            for (int x = 0; x < yAmount; x++)
             {
                 triangles[tris + 0] = vert + 0;
                 triangles[tris + 1] = vert + width + 1;
@@ -98,21 +115,29 @@ public class WorldGenerator : MonoBehaviour
         plane.GetComponent<MeshFilter>().mesh = mesh;
         
         points.Dispose();
+        
+        // Logging 
+        stopwatch.Stop();
+        Debug.LogFormat("[WorldGenerator::GenerateTerrain] Execution time: {0}ms", stopwatch.ElapsedMilliseconds);
     }
 
     [BurstCompile]
-    struct GeneratePointsJob : IJobParallelFor
+    struct GenerateHeightJob : IJobParallelFor
     {
         public NativeArray<float3> Points;
-        [ReadOnly] public float Width;
+        [ReadOnly] public float Amplitude;
+        [ReadOnly] public float Frequency;
         [ReadOnly] public float NoiseScale;
+        [ReadOnly] public int Octaves;
+        [ReadOnly] public int XAmount;
+        [ReadOnly] public int YAmount;
         
         public void Execute(int index)
         {
-            float x = index % (Width + 1);
-            float y = index / (Width + 1);
-            // Points[index] = new float3(x, PerlinNoise.CalculateNoise((float)x / Width * NoiseScale, (float)y / Height * NoiseScale), y);
-            Points[index] = new float3(x, PerlinNoise.CalculateNoise(x, y) * NoiseScale, y);
+            float x = index % (XAmount + 1);
+            float y = index / (XAmount + 1);
+            // Points[index] = new float3(x, PerlinNoise.CalculateNoise(x / XAmount, y / YAmount) * NoiseScale, y);
+            Points[index] = new float3(x, FractalNoise.CalculateNoise(x / XAmount, y / YAmount, Frequency, Amplitude, Octaves) * NoiseScale, y);
         }
     }
 
@@ -169,7 +194,7 @@ public class WorldGenerator : MonoBehaviour
             Scales = scales,
             Width = width,
             Height = height,
-            NoiseScale = noiseScale,
+            Amplitude = amplitude,
             PercentageBlocks = percentageBlocks,
         };
         JobHandle handle = job.Schedule(width * height, 64);
@@ -231,14 +256,14 @@ public class WorldGenerator : MonoBehaviour
         public NativeArray<float3> Scales;
         [ReadOnly] public float Width;
         [ReadOnly] public float Height;
-        [ReadOnly] public float NoiseScale;
+        [ReadOnly] public float Amplitude;
         [ReadOnly] public float PercentageBlocks;
         public void Execute(int index)
         {
             x = index % Width;
             y = index / Width;
             
-            float sample = PerlinNoise.CalculateNoise((float)x / Width * NoiseScale, (float)y / Height * NoiseScale);
+            float sample = PerlinNoise.CalculateNoise((float)x / Width * Amplitude, (float)y / Height * Amplitude);
             Samples[index] = sample;
             if (sample < PercentageBlocks)
             {
