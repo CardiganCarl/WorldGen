@@ -64,7 +64,7 @@ public class WorldGenerator : MonoBehaviour
         
         NativeArray<float3> points = new NativeArray<float3>((xAmount + 1) * (yAmount + 1), Allocator.TempJob);
         
-        GenerateHeightJob generatePointsJob = new GenerateHeightJob()
+        GenerateHeightJob generateHeightJob = new GenerateHeightJob()
         {
             Points = points,
             Amplitude = amplitude,
@@ -73,10 +73,10 @@ public class WorldGenerator : MonoBehaviour
             Octaves = octaves,
             XAmount = xAmount,
             YAmount = yAmount,
+            SubDivisions = subDivisions,
         };
-        JobHandle handle = generatePointsJob.Schedule(points.Length, 64);
+        JobHandle handle = generateHeightJob.Schedule(points.Length, 64);
         handle.Complete();
-
         Vector3[] vertices = new Vector3[points.Length];
         for (int i = 0; i < vertices.Length; i++)
         { 
@@ -87,17 +87,17 @@ public class WorldGenerator : MonoBehaviour
         
         int vert = 0;
         int tris = 0;
-
-        for (int y = 0; y < xAmount; y++)
+        
+        for (int y = 0; y < yAmount; y++)
         {
-            for (int x = 0; x < yAmount; x++)
+            for (int x = 0; x < xAmount; x++)
             {
-                triangles[tris + 0] = vert + 0;
-                triangles[tris + 1] = vert + width + 1;
+                triangles[tris + 0] = vert;
+                triangles[tris + 1] = vert + xAmount + 1;
                 triangles[tris + 2] = vert + 1;
                 triangles[tris + 3] = vert + 1;
-                triangles[tris + 4] = vert + width + 1;
-                triangles[tris + 5] = vert + width + 2;
+                triangles[tris + 4] = vert + xAmount + 1;
+                triangles[tris + 5] = vert + xAmount + 2;
 
                 vert++;
                 tris += 6;
@@ -109,10 +109,10 @@ public class WorldGenerator : MonoBehaviour
         Mesh mesh = new Mesh();
         mesh.vertices = vertices;
         mesh.triangles = triangles;
-        mesh.RecalculateBounds();
-        mesh.RecalculateNormals();
         
         plane.GetComponent<MeshFilter>().mesh = mesh;
+        mesh.RecalculateBounds();
+        mesh.RecalculateNormals();
         
         points.Dispose();
         
@@ -132,12 +132,16 @@ public class WorldGenerator : MonoBehaviour
         [ReadOnly] public int XAmount;
         [ReadOnly] public int YAmount;
         
+        [ReadOnly] public int SubDivisions;
+        
         public void Execute(int index)
         {
             float x = index % (XAmount + 1);
             float y = index / (XAmount + 1);
+            float u = x / XAmount;
+            float v = y / YAmount;
             // Points[index] = new float3(x, PerlinNoise.CalculateNoise(x / XAmount, y / YAmount) * NoiseScale, y);
-            Points[index] = new float3(x, FractalNoise.CalculateNoise(x / XAmount, y / YAmount, Frequency, Amplitude, Octaves) * NoiseScale, y);
+            Points[index] = new float3(x / SubDivisions, FractalNoise.CalculateNoise(u, v, Frequency, Amplitude, Octaves) * NoiseScale, y / SubDivisions);
         }
     }
 
