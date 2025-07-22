@@ -28,6 +28,7 @@ public class WorldGenerator : MonoBehaviour
     [Header("Materials")]
     public Material planeMaterial;
     public Material obstacleMaterial;
+    public Gradient planeGradient;
 
     [Header("AI")]
     public GameObject pawnDirectoryInstance;
@@ -77,10 +78,13 @@ public class WorldGenerator : MonoBehaviour
         };
         JobHandle handle = generateHeightJob.Schedule(points.Length, 64);
         handle.Complete();
+        
         Vector3[] vertices = new Vector3[points.Length];
+        Color[] colors = new Color[points.Length];
         for (int i = 0; i < vertices.Length; i++)
         { 
-            vertices[i] = points[i];   
+            vertices[i] = points[i];
+            colors[i] = planeGradient.Evaluate(points[i].y / noiseScale);
         }
         
         int[] triangles = new int[xAmount * yAmount * 6];
@@ -109,6 +113,7 @@ public class WorldGenerator : MonoBehaviour
         Mesh mesh = new Mesh();
         mesh.vertices = vertices;
         mesh.triangles = triangles;
+        mesh.colors = colors;
         
         plane.GetComponent<MeshFilter>().mesh = mesh;
         mesh.RecalculateBounds();
@@ -136,11 +141,11 @@ public class WorldGenerator : MonoBehaviour
         
         public void Execute(int index)
         {
-            float x = index % (XAmount + 1);
-            float y = index / (XAmount + 1);
+            float x = (float)index % (XAmount + 1);
+            float y = (float)index / (XAmount + 1);
             float u = x / XAmount;
             float v = y / YAmount;
-            // Points[index] = new float3(x, PerlinNoise.CalculateNoise(x / XAmount, y / YAmount) * NoiseScale, y);
+            
             Points[index] = new float3(x / SubDivisions, FractalNoise.CalculateNoise(u, v, Frequency, Amplitude, Octaves) * NoiseScale, y / SubDivisions);
         }
     }
