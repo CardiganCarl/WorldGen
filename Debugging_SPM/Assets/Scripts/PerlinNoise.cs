@@ -47,6 +47,7 @@ public struct PerlinNoise
 
         p.Dispose();
         
+        // Return a normalized value between 0 and 1.
         return (value / 0.70710678f + 1f) * 0.5f;
     }
 
