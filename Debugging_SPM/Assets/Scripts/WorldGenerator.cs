@@ -25,6 +25,7 @@ public class WorldGenerator : MonoBehaviour
     public float frequency = 1.0f;
     public float noiseScale = 0.5f;
     public int octaves = 4;
+    public bool autoUpdate = false;
 
     [Header("Materials")]
     public Material planeMaterial;
@@ -45,6 +46,7 @@ public class WorldGenerator : MonoBehaviour
     private NativeArray<float3> scales;
 
     private int chunkSize;
+    private GameObject plane;
     
     void Awake()
     {
@@ -58,8 +60,9 @@ public class WorldGenerator : MonoBehaviour
         var stopwatch = new System.Diagnostics.Stopwatch();
         stopwatch.Start();
         
-        DestroyWorld();
-        GameObject plane = CreatePlane();
+        if (!plane)
+        // DestroyWorld();
+        plane = CreatePlane();
 
 		int xAmount = width * subDivisions;
 		int yAmount = height * subDivisions;
