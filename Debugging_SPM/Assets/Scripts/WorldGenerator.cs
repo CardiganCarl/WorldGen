@@ -7,6 +7,7 @@ using UnityEngine;
 using UnityEngine.Jobs;
 using Unity.Burst;
 using Unity.Mathematics;
+using Unity.VisualScripting;
 using Random = UnityEngine.Random;
 
 [BurstCompile]
@@ -80,44 +81,35 @@ public class WorldGenerator : MonoBehaviour
         handle.Complete();
         
         Vector3[] vertices = new Vector3[points.Length];
+        Vector2[] uvs = new Vector2[points.Length];
         Color[] colors = new Color[points.Length];
+        
         for (int i = 0; i < vertices.Length; i++)
         { 
             vertices[i] = points[i];
+            
+            // Set vertex color equivalent to the normalized height value of the vertex.
             colors[i] = planeGradient.Evaluate(points[i].y / noiseScale);
+            
+            float u = (i % (xAmount + 1)) / (float)xAmount;
+            float v = (i / (xAmount + 1)) / (float)yAmount;
+
+            uvs[i] = new Vector2(u, v);
         }
         
-        int[] triangles = new int[xAmount * yAmount * 6];
-        
-        int vert = 0;
-        int tris = 0;
-        
-        for (int y = 0; y < yAmount; y++)
-        {
-            for (int x = 0; x < xAmount; x++)
-            {
-                triangles[tris + 0] = vert;
-                triangles[tris + 1] = vert + xAmount + 1;
-                triangles[tris + 2] = vert + 1;
-                triangles[tris + 3] = vert + 1;
-                triangles[tris + 4] = vert + xAmount + 1;
-                triangles[tris + 5] = vert + xAmount + 2;
+        int[] triangles = CalculateTriangles(xAmount, yAmount);
 
-                vert++;
-                tris += 6;
-            }
-
-            vert++;
-        }
-        
         Mesh mesh = new Mesh();
+        mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
         mesh.vertices = vertices;
         mesh.triangles = triangles;
         mesh.colors = colors;
+        mesh.uv = uvs;
         
         plane.GetComponent<MeshFilter>().mesh = mesh;
         mesh.RecalculateBounds();
         mesh.RecalculateNormals();
+        mesh.RecalculateTangents();
         
         points.Dispose();
         
@@ -141,13 +133,41 @@ public class WorldGenerator : MonoBehaviour
         
         public void Execute(int index)
         {
-            float x = (float)index % (XAmount + 1);
-            float y = (float)index / (XAmount + 1);
+            float x = index % (XAmount + 1);
+            float y = index / (XAmount + 1);
             float u = x / XAmount;
             float v = y / YAmount;
             
             Points[index] = new float3(x / SubDivisions, FractalNoise.CalculateNoise(u, v, Frequency, Amplitude, Octaves) * NoiseScale, y / SubDivisions);
         }
+    }
+
+    private int[] CalculateTriangles(int xAmount, int yAmount)
+    {
+        int[] triangles = new int[xAmount * yAmount * 6];
+        
+        int vert = 0;
+        int tris = 0;
+        
+        for (int y = 0; y < yAmount; y++)
+        {
+            for (int x = 0; x < xAmount; x++)
+            {
+                triangles[tris + 0] = vert;
+                triangles[tris + 1] = vert + xAmount + 1;
+                triangles[tris + 2] = vert + 1;
+                triangles[tris + 3] = vert + 1;
+                triangles[tris + 4] = vert + xAmount + 1;
+                triangles[tris + 5] = vert + xAmount + 2;
+
+                vert++;
+                tris += 6;
+            }
+
+            vert++;
+        }
+        
+        return triangles;
     }
 
     [ContextMenu("Destroy World")]
