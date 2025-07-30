@@ -21,9 +21,8 @@ public class WorldGenerator : MonoBehaviour
 	public int subDivisions = 200;
     
     [Header("Noise")]
-    public float amplitude = 15.0f;
     public float frequency = 1.0f;
-    public float noiseScale = 0.5f;
+    public float amplitude = 0.5f;
     public int octaves = 4;
     public uint seed = 1;
     public Vector2 offset;
@@ -50,6 +49,7 @@ public class WorldGenerator : MonoBehaviour
     private int chunkSize;
     private int previousWidth;
     private int previousHeight;
+    private int previousSubDivisions;
     
     // Cached values.
     private GameObject plane;
@@ -69,12 +69,13 @@ public class WorldGenerator : MonoBehaviour
         var stopwatch = new System.Diagnostics.Stopwatch();
         stopwatch.Start();
 
-        if (!plane || width != previousWidth || height != previousHeight)
+        if (!plane || width != previousWidth || height != previousHeight || subDivisions != previousSubDivisions)
         {
             DestroyWorld();
             plane = CreatePlane();
             previousWidth = width;
             previousHeight = height;
+            previousSubDivisions = subDivisions;
             mesh = new Mesh();
             meshFilter = plane.GetComponent<MeshFilter>();
         }
@@ -90,7 +91,6 @@ public class WorldGenerator : MonoBehaviour
             Seed = seed,
             Amplitude = amplitude,
             Frequency = frequency,
-            NoiseScale = noiseScale,
             Octaves = octaves,
             Offset = offset,
             XAmount = xAmount,
@@ -109,7 +109,7 @@ public class WorldGenerator : MonoBehaviour
             vertices[i] = points[i];
             
             // Set vertex color equivalent to the normalized height value of the vertex.
-            colors[i] = planeGradient.Evaluate(points[i].y / noiseScale);
+            colors[i] = planeGradient.Evaluate(points[i].y / amplitude);
             
             float u = (i % (xAmount + 1)) / (float)xAmount;
             float v = (i / (xAmount + 1)) / (float)yAmount;
@@ -130,12 +130,6 @@ public class WorldGenerator : MonoBehaviour
         mesh.colors = colors;
         mesh.uv = uvs;
         
-        // if (!meshFilter)
-            
-        
-        // if (!mesh)
-            
-        
         meshFilter.mesh = mesh;
         mesh.RecalculateBounds();
         mesh.RecalculateNormals();
@@ -155,7 +149,6 @@ public class WorldGenerator : MonoBehaviour
         [ReadOnly] public uint Seed;
         [ReadOnly] public float Amplitude;
         [ReadOnly] public float Frequency;
-        [ReadOnly] public float NoiseScale;
         [ReadOnly] public int Octaves;
         [ReadOnly] public float2 Offset;
         [ReadOnly] public int XAmount;
@@ -170,7 +163,7 @@ public class WorldGenerator : MonoBehaviour
             float u = x / XAmount;
             float v = y / YAmount;
             
-            Points[index] = new float3(x / SubDivisions, FractalNoise.CalculateNoise(u, v, Seed, Frequency, Amplitude, Octaves, Offset) * NoiseScale, y / SubDivisions);
+            Points[index] = new float3(x / SubDivisions, FractalNoise.CalculateNoise(u, v, Seed, Frequency, Octaves, Offset) * Amplitude, y / SubDivisions);
         }
     }
 

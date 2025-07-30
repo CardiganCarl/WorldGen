@@ -22,17 +22,19 @@ public class FractalNoise : MonoBehaviour
     /// <param name="octaves">Determines the amount of iterations, and therefore the amount of detail in the generated noise.</param>
     /// <param name="offset">The offset for scrolling over the noise.</param>
     /// <returns>The normalized value of the summed up noise at the given position.</returns>
-    public static float CalculateNoise(float x, float y, uint seed, float frequency, float amplitude, int octaves, float2 offset)
+    public static float CalculateNoise(float x, float y, uint seed, float frequency, int octaves, float2 offset)
     {
         Unity.Mathematics.Random random = new Unity.Mathematics.Random(seed);
         NativeArray<float2> octaveOffsets = new NativeArray<float2>(octaves, Allocator.Temp);
+        
         for (int i = 0; i < octaves; i++)
         {
-            float offsetX = random.NextFloat(-1.0f, 1.0f) + offset.x;
-            float offsetY = random.NextFloat(-1.0f, 1.0f) + offset.y;
+            float offsetX = random.NextFloat(-1000f, 1000f) + offset.x;
+            float offsetY = random.NextFloat(-1000f, 1000f) + offset.y;
             octaveOffsets[i] = new float2(offsetX, offsetY);
         }
         
+        float amplitude = 1;
         float noise = 0;
         float maxNoise = 0;
         
