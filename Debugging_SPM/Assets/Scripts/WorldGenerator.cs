@@ -25,7 +25,7 @@ public class WorldGenerator : MonoBehaviour
     public float frequency = 1.0f;
     public float noiseScale = 0.5f;
     public int octaves = 4;
-    public bool autoUpdate = false;
+    public bool autoUpdate;
 
     [Header("Materials")]
     public Material planeMaterial;
@@ -44,9 +44,14 @@ public class WorldGenerator : MonoBehaviour
     private NativeArray<float> samples;
     private NativeArray<float3> positions;
     private NativeArray<float3> scales;
-
+    
     private int chunkSize;
+    
+    // Cached values.
     private GameObject plane;
+    private Mesh mesh;
+    private MeshFilter meshFilter;
+    private Dictionary<(int, int), int[]> computedTriangles = new();
     
     void Awake()
     {
@@ -61,8 +66,10 @@ public class WorldGenerator : MonoBehaviour
         stopwatch.Start();
         
         if (!plane)
-        // DestroyWorld();
-        plane = CreatePlane();
+            plane = CreatePlane();
+        
+        if (!mesh)
+            mesh = new Mesh();
 
 		int xAmount = width * subDivisions;
 		int yAmount = height * subDivisions;
@@ -99,17 +106,24 @@ public class WorldGenerator : MonoBehaviour
 
             uvs[i] = new Vector2(u, v);
         }
-        
-        int[] triangles = CalculateTriangles(xAmount, yAmount);
 
-        Mesh mesh = new Mesh();
+        // Compute triangles if not done for this width and height already.
+        if (!computedTriangles.ContainsKey((xAmount, yAmount)))
+        {
+            computedTriangles.Add((xAmount, yAmount), CalculateTriangles(xAmount, yAmount));
+        }
+        int[] triangles = computedTriangles[(xAmount, yAmount)];
+
         mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
         mesh.vertices = vertices;
         mesh.triangles = triangles;
         mesh.colors = colors;
         mesh.uv = uvs;
         
-        plane.GetComponent<MeshFilter>().mesh = mesh;
+        if (!meshFilter)
+            meshFilter = plane.GetComponent<MeshFilter>();
+        
+        meshFilter.mesh = mesh;
         mesh.RecalculateBounds();
         mesh.RecalculateNormals();
         mesh.RecalculateTangents();
