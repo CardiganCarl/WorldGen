@@ -25,6 +25,8 @@ public class WorldGenerator : MonoBehaviour
     public float frequency = 1.0f;
     public float noiseScale = 0.5f;
     public int octaves = 4;
+    public uint seed = 1;
+    public Vector2 offset;
     public bool autoUpdate;
 
     [Header("Materials")]
@@ -46,6 +48,8 @@ public class WorldGenerator : MonoBehaviour
     private NativeArray<float3> scales;
     
     private int chunkSize;
+    private int previousWidth;
+    private int previousHeight;
     
     // Cached values.
     private GameObject plane;
@@ -64,12 +68,16 @@ public class WorldGenerator : MonoBehaviour
         // Log execution time.
         var stopwatch = new System.Diagnostics.Stopwatch();
         stopwatch.Start();
-        
-        if (!plane)
+
+        if (!plane || width != previousWidth || height != previousHeight)
+        {
+            DestroyWorld();
             plane = CreatePlane();
-        
-        if (!mesh)
+            previousWidth = width;
+            previousHeight = height;
             mesh = new Mesh();
+            meshFilter = plane.GetComponent<MeshFilter>();
+        }
 
 		int xAmount = width * subDivisions;
 		int yAmount = height * subDivisions;
@@ -79,10 +87,12 @@ public class WorldGenerator : MonoBehaviour
         GenerateHeightJob generateHeightJob = new GenerateHeightJob()
         {
             Points = points,
+            Seed = seed,
             Amplitude = amplitude,
             Frequency = frequency,
             NoiseScale = noiseScale,
             Octaves = octaves,
+            Offset = offset,
             XAmount = xAmount,
             YAmount = yAmount,
             SubDivisions = subDivisions,
@@ -120,8 +130,11 @@ public class WorldGenerator : MonoBehaviour
         mesh.colors = colors;
         mesh.uv = uvs;
         
-        if (!meshFilter)
-            meshFilter = plane.GetComponent<MeshFilter>();
+        // if (!meshFilter)
+            
+        
+        // if (!mesh)
+            
         
         meshFilter.mesh = mesh;
         mesh.RecalculateBounds();
@@ -139,10 +152,12 @@ public class WorldGenerator : MonoBehaviour
     struct GenerateHeightJob : IJobParallelFor
     {
         public NativeArray<float3> Points;
+        [ReadOnly] public uint Seed;
         [ReadOnly] public float Amplitude;
         [ReadOnly] public float Frequency;
         [ReadOnly] public float NoiseScale;
         [ReadOnly] public int Octaves;
+        [ReadOnly] public float2 Offset;
         [ReadOnly] public int XAmount;
         [ReadOnly] public int YAmount;
         
@@ -155,7 +170,7 @@ public class WorldGenerator : MonoBehaviour
             float u = x / XAmount;
             float v = y / YAmount;
             
-            Points[index] = new float3(x / SubDivisions, FractalNoise.CalculateNoise(u, v, Frequency, Amplitude, Octaves) * NoiseScale, y / SubDivisions);
+            Points[index] = new float3(x / SubDivisions, FractalNoise.CalculateNoise(u, v, Seed, Frequency, Amplitude, Octaves, Offset) * NoiseScale, y / SubDivisions);
         }
     }
 
