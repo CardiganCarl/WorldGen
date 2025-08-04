@@ -13,12 +13,20 @@ using Random = UnityEngine.Random;
 [BurstCompile]
 public class WorldGenerator : MonoBehaviour
 {
+    public enum DrawMode
+    {
+        Regions,
+        Gradients
+    };
+    
     [Header("World")]
     public int width = 200;
     public int height = 200;
     public int chunks = 4;
     public float percentageBlocks = 0.35f;
-	public int subDivisions = 200;
+	public float subDivisions = 1;
+    public TerrainType[] regions;
+    public DrawMode drawMode;
     
     [Header("Noise")]
     public float frequency = 1.0f;
@@ -49,7 +57,7 @@ public class WorldGenerator : MonoBehaviour
     private int chunkSize;
     private int previousWidth;
     private int previousHeight;
-    private int previousSubDivisions;
+    private float previousSubDivisions;
     
     // Cached values.
     private GameObject plane;
@@ -64,7 +72,7 @@ public class WorldGenerator : MonoBehaviour
 
     [ContextMenu("Generate Terrain")]
     public void GenerateTerrain()
-    { 
+    {
         // Log execution time.
         var stopwatch = new System.Diagnostics.Stopwatch();
         stopwatch.Start();
@@ -80,8 +88,8 @@ public class WorldGenerator : MonoBehaviour
             meshFilter = plane.GetComponent<MeshFilter>();
         }
 
-		int xAmount = width * subDivisions;
-		int yAmount = height * subDivisions;
+		int xAmount = (int)(width * subDivisions);
+		int yAmount = (int)(height * subDivisions);
         
         NativeArray<float3> points = new NativeArray<float3>((xAmount + 1) * (yAmount + 1), Allocator.TempJob);
         
@@ -107,9 +115,22 @@ public class WorldGenerator : MonoBehaviour
         for (int i = 0; i < vertices.Length; i++)
         { 
             vertices[i] = points[i];
-            
-            // Set vertex color equivalent to the normalized height value of the vertex.
-            colors[i] = planeGradient.Evaluate(points[i].y / amplitude);
+
+            if (drawMode == DrawMode.Gradients)
+            {
+                colors[i] = planeGradient.Evaluate(points[i].y / amplitude);
+            }
+            else if (drawMode == DrawMode.Regions)
+            {
+                for (int j = 0; j < regions.Length; j++)
+                {
+                    if (points[i].y / amplitude < regions[j].height)
+                    {
+                        colors[i] = regions[j].color;
+                        break;
+                    }
+                }
+            }
             
             float u = (i % (xAmount + 1)) / (float)xAmount;
             float v = (i / (xAmount + 1)) / (float)yAmount;
@@ -154,7 +175,7 @@ public class WorldGenerator : MonoBehaviour
         [ReadOnly] public int XAmount;
         [ReadOnly] public int YAmount;
         
-        [ReadOnly] public int SubDivisions;
+        [ReadOnly] public float SubDivisions;
         
         public void Execute(int index)
         {
@@ -372,4 +393,12 @@ public class WorldGenerator : MonoBehaviour
         stopwatch.Stop();
         Debug.LogFormat("[WorldGenerator::PlaceAI] Execution time: {0}ms", stopwatch.ElapsedMilliseconds);
     }
+}
+
+[Serializable]
+public struct TerrainType
+{
+    public string name;
+    public float height;
+    public Color color;
 }
