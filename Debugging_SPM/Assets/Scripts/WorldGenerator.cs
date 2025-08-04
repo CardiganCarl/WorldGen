@@ -16,7 +16,8 @@ public class WorldGenerator : MonoBehaviour
     public enum DrawMode
     {
         Regions,
-        Gradients
+        Gradients,
+        Greyscale
     };
     
     [Header("World")]
@@ -27,6 +28,9 @@ public class WorldGenerator : MonoBehaviour
 	public float subDivisions = 1;
     public TerrainType[] regions;
     public DrawMode drawMode;
+
+    [Header("Appearance")] 
+    public float aoScale = 2;
     
     [Header("Noise")]
     public float frequency = 1.0f;
@@ -131,6 +135,17 @@ public class WorldGenerator : MonoBehaviour
                     }
                 }
             }
+            else if (drawMode == DrawMode.Greyscale)
+            {
+                colors[i] = Color.Lerp(Color.black, Color.white, points[i].y / amplitude);
+            }
+
+            // TODO: Replace with a better approximation (sweep-based hemisphere sampling).
+            float avgNeighborHeight = GetNeighboringHeight(vertices, i, xAmount, yAmount);
+            float delta = Mathf.Abs(avgNeighborHeight - points[i].y) * aoScale / amplitude;
+            float ao = 1.0f - Mathf.Clamp01(delta * aoScale / amplitude);
+            
+            colors[i] *= ao;
             
             float u = (i % (xAmount + 1)) / (float)xAmount;
             float v = (i / (xAmount + 1)) / (float)yAmount;
@@ -185,6 +200,46 @@ public class WorldGenerator : MonoBehaviour
             float v = y / YAmount;
             
             Points[index] = new float3(x / SubDivisions, FractalNoise.CalculateNoise(u, v, Seed, Frequency, Octaves, Offset) * Amplitude, y / SubDivisions);
+        }
+    }
+
+    private float GetNeighboringHeight(Vector3[] vertices, int index, int xAmount, int yAmount)
+    {
+        int count = 0;
+        float sum = 0.0f;
+        
+        int xIndex = index % (xAmount + 1);
+        int yIndex = index / (xAmount + 1);
+        
+        for (int y = -1; y <= 1; y++)
+        {
+            for (int x = -1; x <= 1; x++)
+            {
+                if (x == 0 && y == 0)
+                    continue;
+                int dx = x + xIndex;
+                int dy = y + yIndex;
+                
+                if (dx < 0 || dx > xAmount || dy < 0 || dy > yAmount)
+                    continue;
+                
+                int neighborIndex = dy * (xAmount + 1) + dx;
+                sum += vertices[neighborIndex].y;
+                
+                count++;
+            }
+        }
+
+        if (count > 0)
+        {
+            // Debug.Log(sum / count);
+            sum /= count;
+            return sum;
+        }
+        else
+        {
+            Debug.Log("Wrong?");
+            return 0.0f;
         }
     }
 
