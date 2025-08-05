@@ -17,7 +17,8 @@ public class WorldGenerator : MonoBehaviour
     {
         Regions,
         Gradients,
-        Greyscale
+        Greyscale,
+		Textures
     };
     
     [Header("World")]
@@ -27,10 +28,12 @@ public class WorldGenerator : MonoBehaviour
     public float percentageBlocks = 0.35f;
 	public float subDivisions = 1;
     public TerrainType[] regions;
-    public DrawMode drawMode;
+    
 
     [Header("Appearance")] 
+    public DrawMode drawMode;
     public float aoScale = 2;
+    
     
     [Header("Noise")]
     public float frequency = 1.0f;
@@ -40,8 +43,9 @@ public class WorldGenerator : MonoBehaviour
     public Vector2 offset;
     public bool autoUpdate;
 
-    [Header("Materials")]
-    public Material planeMaterial;
+    [Header("Materials")] 
+    public Material textureShaderMaterial;
+    public Material vertexColorMaterial;
     public Material obstacleMaterial;
     public Gradient planeGradient;
 
@@ -120,6 +124,7 @@ public class WorldGenerator : MonoBehaviour
         { 
             vertices[i] = points[i];
 
+            plane.GetComponent<MeshRenderer>().sharedMaterial = vertexColorMaterial;
             if (drawMode == DrawMode.Gradients)
             {
                 colors[i] = planeGradient.Evaluate(points[i].y / amplitude);
@@ -138,6 +143,13 @@ public class WorldGenerator : MonoBehaviour
             else if (drawMode == DrawMode.Greyscale)
             {
                 colors[i] = Color.Lerp(Color.black, Color.white, points[i].y / amplitude);
+            }
+			else if (drawMode == DrawMode.Textures)
+            {
+                plane.GetComponent<MeshRenderer>().sharedMaterial = textureShaderMaterial;
+                
+                // Sends the vertex height to the shader as a color value.
+                colors[i] = new Color(points[i].y / amplitude, 0, 0);
             }
 
             // TODO: Replace with a better approximation (sweep-based hemisphere sampling).
@@ -288,7 +300,7 @@ public class WorldGenerator : MonoBehaviour
         plane.transform.localScale = new Vector3(width, 10.0f, height) * 0.1f;
         // NOTE: Origo of a plane is in the middle. Move lower left corner to zero.
         plane.transform.position = new Vector3(width * 0.5f - 0.5f, 0.0f, height * 0.5f - 0.5f);
-        plane.GetComponent<Renderer>().material = planeMaterial;
+        plane.GetComponent<Renderer>().material = vertexColorMaterial;
         plane.transform.SetParent(transform);
         
         return plane;
