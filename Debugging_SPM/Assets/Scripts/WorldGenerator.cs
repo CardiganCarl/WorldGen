@@ -38,6 +38,7 @@ public class WorldGenerator : MonoBehaviour
     [Header("Noise")]
     public float frequency = 1.0f;
     public float amplitude = 0.5f;
+	public AnimationCurve meshHeightCurve;
     public int octaves = 4;
     public uint seed = 1;
     public Vector2 offset;
@@ -120,11 +121,18 @@ public class WorldGenerator : MonoBehaviour
         Vector2[] uvs = new Vector2[points.Length];
         Color[] colors = new Color[points.Length];
         
+        // TODO: Make this into a job.
         for (int i = 0; i < vertices.Length; i++)
         { 
             vertices[i] = points[i];
+            
+            // Multiply the height with the curve value at that point.
+            // This makes water for example be flat on the mesh, but mountains more pronounced.
+            vertices[i].y *= meshHeightCurve.Evaluate(points[i].y / amplitude);
 
             plane.GetComponent<MeshRenderer>().sharedMaterial = vertexColorMaterial;
+            
+            // Assign the color for the vertex depending on which draw mode is selected.
             if (drawMode == DrawMode.Gradients)
             {
                 colors[i] = planeGradient.Evaluate(points[i].y / amplitude);
@@ -152,16 +160,17 @@ public class WorldGenerator : MonoBehaviour
                 colors[i] = new Color(points[i].y / amplitude, 0, 0);
             }
 
+            // Apply fake AO to darken areas with big height changes.
             // TODO: Replace with a better approximation (sweep-based hemisphere sampling).
             float avgNeighborHeight = GetNeighboringHeight(vertices, i, xAmount, yAmount);
             float delta = Mathf.Abs(avgNeighborHeight - points[i].y) * aoScale / amplitude;
-            float ao = 1.0f - Mathf.Clamp01(delta * aoScale / amplitude);
             
+            float ao = 1.0f - Mathf.Clamp01(delta * aoScale / amplitude);
             colors[i] *= ao;
             
+            // Calculate uvs.
             float u = (i % (xAmount + 1)) / (float)xAmount;
             float v = (i / (xAmount + 1)) / (float)yAmount;
-
             uvs[i] = new Vector2(u, v);
         }
 
