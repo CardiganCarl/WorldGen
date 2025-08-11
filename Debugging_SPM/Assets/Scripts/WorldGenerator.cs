@@ -28,6 +28,7 @@ public class WorldGenerator : MonoBehaviour
     [Range(1, 6)]
     public int levelOfDetail;
     public bool logPerformance;
+    public bool autoUpdate;
 
     [Header("Appearance")] 
     public DrawMode drawMode;
@@ -41,7 +42,6 @@ public class WorldGenerator : MonoBehaviour
     public int octaves = 4;
     public uint seed = 1;
     public Vector2 offset;
-    public bool autoUpdate;
 
     [Header("Materials")] 
     public Material textureShaderMaterial;
@@ -62,8 +62,8 @@ public class WorldGenerator : MonoBehaviour
     [ContextMenu("Generate Terrain")]
     public void GenerateTerrain()
     {
-        System.Diagnostics.Stopwatch stopwatch = null;
         // Log execution time.
+        System.Diagnostics.Stopwatch stopwatch = null;
         if (logPerformance)
         {
             stopwatch = new System.Diagnostics.Stopwatch();

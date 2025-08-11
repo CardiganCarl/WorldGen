@@ -22,5 +22,10 @@ public class WorldGeneratorEditor : Editor
         {
             worldGenerator.GenerateTerrain();
         }
+
+        if (GUILayout.Button("Destroy World"))
+        {
+            worldGenerator.DestroyWorld();
+        }
     }
 }
