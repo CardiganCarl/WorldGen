@@ -24,16 +24,19 @@ public class WorldGenerator : MonoBehaviour
     [Header("World")]
     public int width = 200;
     public int height = 200;
+    [Range(1, 6)]
+    public int levelOfDetail;
+    public bool logPerformance;
+    
+    [Header("World")]
     public int chunks = 4;
     public float percentageBlocks = 0.35f;
 	public float subDivisions = 1;
     public TerrainType[] regions;
-    
 
     [Header("Appearance")] 
     public DrawMode drawMode;
     public float aoScale = 2;
-    
     
     [Header("Noise")]
     public float frequency = 1.0f;
@@ -63,10 +66,11 @@ public class WorldGenerator : MonoBehaviour
     private NativeArray<float3> positions;
     private NativeArray<float3> scales;
     
-    private int chunkSize;
+    private int terrainChunkSize;
     private int previousWidth;
     private int previousHeight;
     private float previousSubDivisions;
+    private int previousLevelOfDetail;
     
     // Cached values.
     private GameObject plane;
@@ -82,23 +86,28 @@ public class WorldGenerator : MonoBehaviour
     [ContextMenu("Generate Terrain")]
     public void GenerateTerrain()
     {
+        System.Diagnostics.Stopwatch stopwatch = null;
         // Log execution time.
-        var stopwatch = new System.Diagnostics.Stopwatch();
-        stopwatch.Start();
-
-        if (!plane || width != previousWidth || height != previousHeight || subDivisions != previousSubDivisions)
+        if (logPerformance)
+        {
+            stopwatch = new System.Diagnostics.Stopwatch();
+            stopwatch.Start();
+        }
+        
+        if (!plane || width != previousWidth || height != previousHeight || subDivisions != previousSubDivisions || levelOfDetail != previousLevelOfDetail)
         {
             DestroyWorld();
             plane = CreatePlane();
             previousWidth = width;
             previousHeight = height;
             previousSubDivisions = subDivisions;
+            previousLevelOfDetail = levelOfDetail;
             mesh = new Mesh();
             meshFilter = plane.GetComponent<MeshFilter>();
         }
 
-		int xAmount = (int)(width * subDivisions);
-		int yAmount = (int)(height * subDivisions);
+        int xAmount = (int)(width * subDivisions) / levelOfDetail;
+        int yAmount = (int)(height * subDivisions) / levelOfDetail;
         
         NativeArray<float3> points = new NativeArray<float3>((xAmount + 1) * (yAmount + 1), Allocator.TempJob);
         
@@ -113,6 +122,7 @@ public class WorldGenerator : MonoBehaviour
             XAmount = xAmount,
             YAmount = yAmount,
             SubDivisions = subDivisions,
+            LevelOfDetail = levelOfDetail,
         };
         JobHandle handle = generateHeightJob.Schedule(points.Length, 64);
         handle.Complete();
@@ -180,7 +190,7 @@ public class WorldGenerator : MonoBehaviour
             computedTriangles.Add((xAmount, yAmount), CalculateTriangles(xAmount, yAmount));
         }
         int[] triangles = computedTriangles[(xAmount, yAmount)];
-
+        
         mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
         mesh.vertices = vertices;
         mesh.triangles = triangles;
@@ -194,9 +204,12 @@ public class WorldGenerator : MonoBehaviour
         
         points.Dispose();
         
-        // Logging 
-        stopwatch.Stop();
-        Debug.LogFormat("[WorldGenerator::GenerateTerrain] Execution time: {0}ms", stopwatch.ElapsedMilliseconds);
+        // Logging
+        if (stopwatch != null)
+        {
+            stopwatch.Stop();
+            Debug.LogFormat("[WorldGenerator::GenerateTerrain] Execution time: {0}ms", stopwatch.ElapsedMilliseconds);
+        }
     }
 
     [BurstCompile]
@@ -212,6 +225,7 @@ public class WorldGenerator : MonoBehaviour
         [ReadOnly] public int YAmount;
         
         [ReadOnly] public float SubDivisions;
+        [ReadOnly] public int LevelOfDetail;
         
         public void Execute(int index)
         {
@@ -220,7 +234,7 @@ public class WorldGenerator : MonoBehaviour
             float u = x / XAmount;
             float v = y / YAmount;
             
-            Points[index] = new float3(x / SubDivisions, FractalNoise.CalculateNoise(u, v, Seed, Frequency, Octaves, Offset) * Amplitude, y / SubDivisions);
+            Points[index] = new float3(x / SubDivisions * LevelOfDetail, FractalNoise.CalculateNoise(u, v, Seed, Frequency, Octaves, Offset) * Amplitude, y / SubDivisions * LevelOfDetail);
         }
     }
 
@@ -253,7 +267,6 @@ public class WorldGenerator : MonoBehaviour
 
         if (count > 0)
         {
-            // Debug.Log(sum / count);
             sum /= count;
             return sum;
         }
@@ -330,7 +343,7 @@ public class WorldGenerator : MonoBehaviour
         positions = new NativeArray<float3>(height * width, Allocator.Persistent);
         scales = new NativeArray<float3>(height * width, Allocator.Persistent);
 
-        chunkSize = width / chunks;
+        terrainChunkSize = width / chunks;
 
         DestroyWorld();
         CreatePlane();
@@ -366,7 +379,7 @@ public class WorldGenerator : MonoBehaviour
                 }
 
                 // Create new chunk by combining meshes.
-                if (j == i && (j + 1) % chunkSize == 0 && (i + 1) % chunkSize == 0)
+                if (j == i && (j + 1) % terrainChunkSize == 0 && (i + 1) % terrainChunkSize == 0)
                 {
                     Mesh mesh = new Mesh();
                     mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
