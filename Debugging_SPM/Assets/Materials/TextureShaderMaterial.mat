@@ -155,7 +155,7 @@ Material:
     - _Snow_height: 0.75
     - _SpecularHighlights: 1
     - _SrcBlend: 1
-    - _Tile: 0.05
+    - _Tile: 0.0025
     - _UVSec: 0
     - _ZWrite: 1
     m_Colors:

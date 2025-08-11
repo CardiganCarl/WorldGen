@@ -59,6 +59,7 @@ public class WorldGenerator : MonoBehaviour
     private MeshFilter meshFilter;
     private Dictionary<(int, int), int[]> computedTriangles = new();
 
+    // Generates a procedural terrain mesh based on fractal brownian motion.
     [ContextMenu("Generate Terrain")]
     public void GenerateTerrain()
     {
@@ -70,6 +71,7 @@ public class WorldGenerator : MonoBehaviour
             stopwatch.Start();
         }
         
+        // The plane does not exist, or the amount of vertices in it has changed.
         if (!plane || width != previousWidth || height != previousHeight || subDivisions != previousSubDivisions || levelOfDetail != previousLevelOfDetail)
         {
             DestroyWorld();
@@ -82,11 +84,13 @@ public class WorldGenerator : MonoBehaviour
             meshFilter = plane.GetComponent<MeshFilter>();
         }
 
+        // Get the amount of vertices.
         int xAmount = (int)(width * subDivisions) / levelOfDetail;
         int yAmount = (int)(height * subDivisions) / levelOfDetail;
         
         NativeArray<float3> points = new NativeArray<float3>((xAmount + 1) * (yAmount + 1), Allocator.TempJob);
         
+        // Calculate the position for each vertex on the mesh.
         GenerateHeightJob generateHeightJob = new GenerateHeightJob()
         {
             Points = points,
@@ -114,20 +118,20 @@ public class WorldGenerator : MonoBehaviour
             
             // Multiply the height with the curve value at that point.
             // This makes water for example be flat on the mesh, but mountains more pronounced.
-            vertices[i].y *= meshHeightCurve.Evaluate(points[i].y / amplitude);
+            vertices[i].y *= meshHeightCurve.Evaluate(GetNormalizedHeight(points[i].y));
 
             plane.GetComponent<MeshRenderer>().sharedMaterial = vertexColorMaterial;
             
-            // Assign the color for the vertex depending on which draw mode is selected.
+            // Assign vertex color depending on which draw mode is selected.
             if (drawMode == DrawMode.Gradients)
             {
-                colors[i] = planeGradient.Evaluate(points[i].y / amplitude);
+                colors[i] = planeGradient.Evaluate(GetNormalizedHeight(points[i].y));
             }
             else if (drawMode == DrawMode.Regions)
             {
                 for (int j = 0; j < regions.Length; j++)
                 {
-                    if (points[i].y / amplitude < regions[j].height)
+                    if (GetNormalizedHeight(points[i].y) < regions[j].height)
                     {
                         colors[i] = regions[j].color;
                         break;
@@ -136,22 +140,20 @@ public class WorldGenerator : MonoBehaviour
             }
             else if (drawMode == DrawMode.Greyscale)
             {
-                colors[i] = Color.Lerp(Color.black, Color.white, points[i].y / amplitude);
+                colors[i] = Color.Lerp(Color.black, Color.white, GetNormalizedHeight(points[i].y));
             }
 			else if (drawMode == DrawMode.Textures)
             {
                 plane.GetComponent<MeshRenderer>().sharedMaterial = textureShaderMaterial;
                 
                 // Sends the vertex height to the shader as a color value.
-                colors[i] = new Color(points[i].y / amplitude, 0, 0);
+                colors[i] = new Color(GetNormalizedHeight(points[i].y), 0, 0);
             }
-
+            
             // Apply fake AO to darken areas with big height changes.
             // TODO: Replace with a better approximation (sweep-based hemisphere sampling).
             float avgNeighborHeight = GetNeighboringHeight(vertices, i, xAmount, yAmount);
-            float delta = Mathf.Abs(avgNeighborHeight - points[i].y) * aoScale / amplitude;
-            
-            float ao = 1.0f - Mathf.Clamp01(delta * aoScale / amplitude);
+            float ao = CalculateAO(points[i].y, avgNeighborHeight);
             colors[i] *= ao;
             
             // Calculate uvs.
@@ -167,6 +169,7 @@ public class WorldGenerator : MonoBehaviour
         }
         int[] triangles = computedTriangles[(xAmount, yAmount)];
         
+        // Assign new mesh values.
         mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
         mesh.vertices = vertices;
         mesh.triangles = triangles;
@@ -188,6 +191,7 @@ public class WorldGenerator : MonoBehaviour
         }
     }
 
+    // Job to generate vertex positions for each point on the mesh.
     [BurstCompile]
     struct GenerateHeightJob : IJobParallelFor
     {
@@ -199,7 +203,6 @@ public class WorldGenerator : MonoBehaviour
         [ReadOnly] public float2 Offset;
         [ReadOnly] public int XAmount;
         [ReadOnly] public int YAmount;
-        
         [ReadOnly] public float SubDivisions;
         [ReadOnly] public int LevelOfDetail;
         
@@ -210,10 +213,26 @@ public class WorldGenerator : MonoBehaviour
             float u = x / XAmount;
             float v = y / YAmount;
             
+            // Assign vertex position with calculated fBM height.
             Points[index] = new float3(x / SubDivisions * LevelOfDetail, FractalNoise.CalculateNoise(u, v, Seed, Frequency, Octaves, Offset) * Amplitude, y / SubDivisions * LevelOfDetail);
         }
     }
 
+    // Returns the height value normalized to between 0 and 1.
+    private float GetNormalizedHeight(float h)
+    {
+        return h / amplitude;
+    }
+
+    // Calculate the strength of AO for the given height and neighboring height.
+    private float CalculateAO(float vertexHeight, float neighborHeight)
+    {
+        float delta = Mathf.Abs(neighborHeight - vertexHeight) * aoScale / amplitude;
+        float ao = 1.0f - Mathf.Clamp01(delta * aoScale / amplitude);
+        return ao;
+    }
+
+    // Get the average height of the points neighbors.
     private float GetNeighboringHeight(Vector3[] vertices, int index, int xAmount, int yAmount)
     {
         int count = 0;
@@ -222,18 +241,23 @@ public class WorldGenerator : MonoBehaviour
         int xIndex = index % (xAmount + 1);
         int yIndex = index / (xAmount + 1);
         
+        // Loop over all adjacent vertices.
         for (int y = -1; y <= 1; y++)
         {
             for (int x = -1; x <= 1; x++)
             {
+                // Skip the middle vertex.
                 if (x == 0 && y == 0)
                     continue;
+                
                 int dx = x + xIndex;
                 int dy = y + yIndex;
                 
+                // The vertex doesn't exist.
                 if (dx < 0 || dx > xAmount || dy < 0 || dy > yAmount)
                     continue;
                 
+                // Add up the height of the neighbor.
                 int neighborIndex = dy * (xAmount + 1) + dx;
                 sum += vertices[neighborIndex].y;
                 
@@ -241,18 +265,16 @@ public class WorldGenerator : MonoBehaviour
             }
         }
 
+        // Return average height.
         if (count > 0)
         {
             sum /= count;
             return sum;
         }
-        else
-        {
-            Debug.Log("Wrong?");
-            return 0.0f;
-        }
+        return 0.0f;
     }
 
+    // Calculates triangles for the given amount of vertices.
     private int[] CalculateTriangles(int xAmount, int yAmount)
     {
         int[] triangles = new int[xAmount * yAmount * 6];
@@ -295,10 +317,9 @@ public class WorldGenerator : MonoBehaviour
         // Create ground plane.
         GameObject plane = GameObject.CreatePrimitive(PrimitiveType.Plane);
         
-        plane.transform.localScale = new Vector3(width, 10.0f, height) * 0.1f;
+        plane.transform.localScale = new Vector3(width, 1, height);
         
         plane.transform.position = new Vector3(width * 0.5f - 0.5f, 0.0f, height * 0.5f - 0.5f);
-        plane.GetComponent<Renderer>().material = vertexColorMaterial;
         plane.transform.SetParent(transform);
         
         return plane;

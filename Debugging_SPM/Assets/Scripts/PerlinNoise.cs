@@ -9,9 +9,12 @@ using UnityEngine;
 [BurstCompile]
 public struct PerlinNoise
 {
-    // Implementation based on article by Raouf Touti.
-    // Calculates perlin noise for the point at the given coordinates.
-    // Returns a value between 0 and 1.
+    /// <summary>
+    /// Calculates the perlin noise for the given position.
+    /// </summary>
+    /// <param name="x">The x coordinate.</param>
+    /// <param name="y">The y coordinate.</param>
+    /// <returns>The strength of perlin noise at the given coordinate, normalized to between 0 and 1.</returns>
     public static float CalculateNoise(float x, float y)
     {
         // Create a new NativeArray with permutation values.
