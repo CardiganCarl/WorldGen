@@ -14,13 +14,13 @@ public class WorldGeneratorEditor : Editor
         {
             if (worldGenerator.autoUpdate)
             {
-                worldGenerator.GenerateTerrain();
+                // worldGenerator.GenerateTerrain();
             }
         }
 
         if (GUILayout.Button("Generate Terrain"))
         {
-            worldGenerator.GenerateTerrain();
+            // worldGenerator.GenerateTerrain();
         }
 
         if (GUILayout.Button("Destroy World"))

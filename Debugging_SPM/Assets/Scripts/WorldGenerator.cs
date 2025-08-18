@@ -54,14 +54,14 @@ public class WorldGenerator : MonoBehaviour
     private int previousLevelOfDetail;
     
     // Cached values.
-    private GameObject plane;
-    private Mesh mesh;
-    private MeshFilter meshFilter;
+    // private GameObject terrain;
+    // private Mesh mesh;
+    // private MeshFilter meshFilter;
     private Dictionary<(int, int), int[]> computedTriangles = new();
 
     // Generates a procedural terrain mesh based on fractal brownian motion.
     [ContextMenu("Generate Terrain")]
-    public void GenerateTerrain()
+    public GameObject GenerateTerrain(Vector2 offset)
     {
         // Log execution time.
         System.Diagnostics.Stopwatch stopwatch = null;
@@ -72,17 +72,22 @@ public class WorldGenerator : MonoBehaviour
         }
         
         // The plane does not exist, or the amount of vertices in it has changed.
-        if (!plane || width != previousWidth || height != previousHeight || subDivisions != previousSubDivisions || levelOfDetail != previousLevelOfDetail)
-        {
-            DestroyWorld();
-            plane = CreatePlane();
-            previousWidth = width;
-            previousHeight = height;
-            previousSubDivisions = subDivisions;
-            previousLevelOfDetail = levelOfDetail;
-            mesh = new Mesh();
-            meshFilter = plane.GetComponent<MeshFilter>();
-        }
+        // if (!terrain || width != previousWidth || height != previousHeight || subDivisions != previousSubDivisions || levelOfDetail != previousLevelOfDetail)
+        // {
+        //     DestroyWorld();
+        //     terrain = CreatePlane();
+        //     previousWidth = width;
+        //     previousHeight = height;
+        //     previousSubDivisions = subDivisions;
+        //     previousLevelOfDetail = levelOfDetail;
+        //     mesh = new Mesh();
+        //     meshFilter = terrain.GetComponent<MeshFilter>();
+        // }
+        
+        // GameObject terrain = GameObject.CreatePrimitive(PrimitiveType.Plane);
+        GameObject terrain = CreatePlane();
+        MeshFilter meshFilter = terrain.GetComponent<MeshFilter>();
+        Mesh mesh = meshFilter.mesh;
 
         // Get the amount of vertices.
         int xAmount = (int)(width * subDivisions) / levelOfDetail;
@@ -120,7 +125,7 @@ public class WorldGenerator : MonoBehaviour
             // This makes water for example be flat on the mesh, but mountains more pronounced.
             vertices[i].y *= meshHeightCurve.Evaluate(GetNormalizedHeight(points[i].y));
 
-            plane.GetComponent<MeshRenderer>().sharedMaterial = vertexColorMaterial;
+            terrain.GetComponent<MeshRenderer>().sharedMaterial = vertexColorMaterial;
             
             // Assign vertex color depending on which draw mode is selected.
             if (drawMode == DrawMode.Gradients)
@@ -144,7 +149,7 @@ public class WorldGenerator : MonoBehaviour
             }
 			else if (drawMode == DrawMode.Textures)
             {
-                plane.GetComponent<MeshRenderer>().sharedMaterial = textureShaderMaterial;
+                terrain.GetComponent<MeshRenderer>().sharedMaterial = textureShaderMaterial;
                 
                 // Sends the vertex height to the shader as a color value.
                 colors[i] = new Color(GetNormalizedHeight(points[i].y), 0, 0);
@@ -189,6 +194,8 @@ public class WorldGenerator : MonoBehaviour
             stopwatch.Stop();
             Debug.LogFormat("[WorldGenerator::GenerateTerrain] Execution time: {0}ms", stopwatch.ElapsedMilliseconds);
         }
+        
+        return terrain;
     }
 
     // Job to generate vertex positions for each point on the mesh.
@@ -317,7 +324,8 @@ public class WorldGenerator : MonoBehaviour
         // Create ground plane.
         GameObject plane = GameObject.CreatePrimitive(PrimitiveType.Plane);
         
-        plane.transform.localScale = new Vector3(width, 1, height);
+        // Divide by 10 to remove the original scale of the plane.
+        plane.transform.localScale = new Vector3(width, 1, height) / 10f;
         
         plane.transform.position = new Vector3(width * 0.5f - 0.5f, 0.0f, height * 0.5f - 0.5f);
         plane.transform.SetParent(transform);

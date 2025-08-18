@@ -20,7 +20,7 @@ public class FractalNoise : MonoBehaviour
     /// <param name="frequency">Determines the amount of large and small values.</param> 
     /// <param name="amplitude">Determines the size of the difference between values.</param>
     /// <param name="octaves">Determines the amount of iterations, and therefore the amount of detail in the generated noise.</param>
-    /// <param name="offset">The offset for scrolling over the noise.</param>
+    /// <param name="octaveOffsets">The offset for scrolling over the noise.</param>
     /// <returns>The normalized value of the summed up noise at the given position.</returns>
     public static float CalculateNoise(float x, float y, uint seed, float frequency, int octaves, float2 offset)
     {
