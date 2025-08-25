@@ -55,6 +55,7 @@ public class WorldGenerator : MonoBehaviour
     
     // Cached values.
     private GameObject plane;
+    private Renderer planeRenderer;
     private Mesh mesh;
     private MeshFilter meshFilter;
     private Dictionary<(int, int), int[]> computedTriangles = new();
@@ -89,11 +90,13 @@ public class WorldGenerator : MonoBehaviour
         int yAmount = (int)(height * subDivisions) / levelOfDetail;
         
         NativeArray<float3> points = new NativeArray<float3>((xAmount + 1) * (yAmount + 1), Allocator.TempJob);
+        NativeArray<float2> nativeUVs = new NativeArray<float2>((xAmount + 1) * (yAmount + 1), Allocator.TempJob);
         
         // Calculate the position for each vertex on the mesh.
-        GenerateHeightJob generateHeightJob = new GenerateHeightJob()
+        CalculateVertexPosition vertexPositionJob = new CalculateVertexPosition()
         {
             Points = points,
+            UVs = nativeUVs,
             Seed = seed,
             Amplitude = amplitude,
             Frequency = frequency,
@@ -104,24 +107,37 @@ public class WorldGenerator : MonoBehaviour
             SubDivisions = subDivisions,
             LevelOfDetail = levelOfDetail,
         };
-        JobHandle handle = generateHeightJob.Schedule(points.Length, 64);
+        JobHandle handle = vertexPositionJob.Schedule(points.Length, 64);
         handle.Complete();
         
         Vector3[] vertices = new Vector3[points.Length];
         Vector2[] uvs = new Vector2[points.Length];
         Color[] colors = new Color[points.Length];
-        
-        // TODO: Make this into a job.
+
         for (int i = 0; i < vertices.Length; i++)
-        { 
+        {
             vertices[i] = points[i];
             
             // Multiply the height with the curve value at that point.
             // This makes water for example be flat on the mesh, but mountains more pronounced.
             vertices[i].y *= meshHeightCurve.Evaluate(GetNormalizedHeight(points[i].y));
-
-            plane.GetComponent<MeshRenderer>().sharedMaterial = vertexColorMaterial;
             
+            uvs[i] = nativeUVs[i];
+        }
+        
+        // Set the material.
+        if (drawMode == DrawMode.Textures)
+        {
+            planeRenderer.sharedMaterial = textureShaderMaterial;
+        }
+        else
+        {
+            planeRenderer.sharedMaterial = vertexColorMaterial;
+        }
+        
+        // Apply per-vertex colors.
+        for (int i = 0; i < vertices.Length; i++)
+        {
             // Assign vertex color depending on which draw mode is selected.
             if (drawMode == DrawMode.Gradients)
             {
@@ -142,24 +158,16 @@ public class WorldGenerator : MonoBehaviour
             {
                 colors[i] = Color.Lerp(Color.black, Color.white, GetNormalizedHeight(points[i].y));
             }
-			else if (drawMode == DrawMode.Textures)
+            else if (drawMode == DrawMode.Textures)
             {
-                plane.GetComponent<MeshRenderer>().sharedMaterial = textureShaderMaterial;
-                
-                // Sends the vertex height to the shader as a color value.
                 colors[i] = new Color(GetNormalizedHeight(points[i].y), 0, 0);
             }
             
             // Apply fake AO to darken areas with big height changes.
             // TODO: Replace with a better approximation (sweep-based hemisphere sampling).
-            float avgNeighborHeight = GetNeighboringHeight(vertices, i, xAmount, yAmount);
-            float ao = CalculateAO(points[i].y, avgNeighborHeight);
+            float avgNeighborHeight = GetNeighboringHeight(points, i, xAmount, yAmount);
+            float ao = CalculateAOAmount(points[i].y, avgNeighborHeight, aoScale, amplitude);
             colors[i] *= ao;
-            
-            // Calculate uvs.
-            float u = (i % (xAmount + 1)) / (float)xAmount;
-            float v = (i / (xAmount + 1)) / (float)yAmount;
-            uvs[i] = new Vector2(u, v);
         }
 
         // Compute triangles if not done for this width and height already.
@@ -182,6 +190,7 @@ public class WorldGenerator : MonoBehaviour
         mesh.RecalculateTangents();
         
         points.Dispose();
+        nativeUVs.Dispose();
         
         // Logging
         if (stopwatch != null)
@@ -193,9 +202,10 @@ public class WorldGenerator : MonoBehaviour
 
     // Job to generate vertex positions for each point on the mesh.
     [BurstCompile]
-    struct GenerateHeightJob : IJobParallelFor
+    private struct CalculateVertexPosition : IJobParallelFor
     {
         public NativeArray<float3> Points;
+        public NativeArray<float2> UVs;
         [ReadOnly] public uint Seed;
         [ReadOnly] public float Amplitude;
         [ReadOnly] public float Frequency;
@@ -215,6 +225,8 @@ public class WorldGenerator : MonoBehaviour
             
             // Assign vertex position with calculated fBM height.
             Points[index] = new float3(x / SubDivisions * LevelOfDetail, FractalNoise.CalculateNoise(u, v, Seed, Frequency, Octaves, Offset) * Amplitude, y / SubDivisions * LevelOfDetail);
+            
+            UVs[index] = new float2(u, v);
         }
     }
 
@@ -225,7 +237,7 @@ public class WorldGenerator : MonoBehaviour
     }
 
     // Calculate the strength of AO for the given height and neighboring height.
-    private float CalculateAO(float vertexHeight, float neighborHeight)
+    private static float CalculateAOAmount(float vertexHeight, float neighborHeight, float aoScale, float amplitude)
     {
         float delta = Mathf.Abs(neighborHeight - vertexHeight) * aoScale / amplitude;
         float ao = 1.0f - Mathf.Clamp01(delta * aoScale / amplitude);
@@ -233,7 +245,7 @@ public class WorldGenerator : MonoBehaviour
     }
 
     // Get the average height of the points neighbors.
-    private float GetNeighboringHeight(Vector3[] vertices, int index, int xAmount, int yAmount)
+    private static float GetNeighboringHeight(NativeArray<float3> vertices, int index, int xAmount, int yAmount)
     {
         int count = 0;
         float sum = 0.0f;
@@ -321,6 +333,8 @@ public class WorldGenerator : MonoBehaviour
         
         plane.transform.position = new Vector3(width * 0.5f - 0.5f, 0.0f, height * 0.5f - 0.5f);
         plane.transform.SetParent(transform);
+        
+        planeRenderer = plane.GetComponent<Renderer>();
         
         return plane;
     }
