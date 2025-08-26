@@ -60,18 +60,9 @@ public class WorldGenerator : MonoBehaviour
     private MeshFilter meshFilter;
     private Dictionary<(int, int), int[]> computedTriangles = new();
 
-    // Generates a procedural terrain mesh based on fractal brownian motion.
     [ContextMenu("Generate Terrain")]
     public void GenerateTerrain()
     {
-        // Log execution time.
-        System.Diagnostics.Stopwatch stopwatch = null;
-        if (logPerformance)
-        {
-            stopwatch = new System.Diagnostics.Stopwatch();
-            stopwatch.Start();
-        }
-        
         // The plane does not exist, or the amount of vertices in it has changed.
         if (!plane || width != previousWidth || height != previousHeight || subDivisions != previousSubDivisions || levelOfDetail != previousLevelOfDetail)
         {
@@ -84,6 +75,24 @@ public class WorldGenerator : MonoBehaviour
             mesh = new Mesh();
             meshFilter = plane.GetComponent<MeshFilter>();
         }
+        
+        GenerateTerrain(offset);
+    }
+
+    // Generates a procedural terrain mesh based on fractal brownian motion.
+    public GameObject GenerateTerrain(Vector2 posOffset)
+    {
+        // Log execution time.
+        System.Diagnostics.Stopwatch stopwatch = null;
+        if (logPerformance)
+        {
+            stopwatch = new System.Diagnostics.Stopwatch();
+            stopwatch.Start();
+        }
+        
+        GameObject terrain = CreatePlane();
+        MeshFilter meshFilter = terrain.GetComponent<MeshFilter>();
+        Mesh mesh = meshFilter.mesh;
 
         // Get the amount of vertices.
         int xAmount = (int)(width * subDivisions) / levelOfDetail;
@@ -101,7 +110,7 @@ public class WorldGenerator : MonoBehaviour
             Amplitude = amplitude,
             Frequency = frequency,
             Octaves = octaves,
-            Offset = offset,
+            Offset = posOffset,
             XAmount = xAmount,
             YAmount = yAmount,
             SubDivisions = subDivisions,
@@ -128,11 +137,11 @@ public class WorldGenerator : MonoBehaviour
         // Set the material.
         if (drawMode == DrawMode.Textures)
         {
-            planeRenderer.sharedMaterial = textureShaderMaterial;
+            terrain.GetComponent<Renderer>().sharedMaterial = textureShaderMaterial;
         }
         else
         {
-            planeRenderer.sharedMaterial = vertexColorMaterial;
+            terrain.GetComponent<Renderer>().sharedMaterial = vertexColorMaterial;
         }
         
         // Apply per-vertex colors.
@@ -189,6 +198,9 @@ public class WorldGenerator : MonoBehaviour
         mesh.RecalculateNormals();
         mesh.RecalculateTangents();
         
+        Debug.Log("World pos: " + posOffset);
+        Debug.Log("Bottom-Left: " + points[0].y + " Bottom-Right: " + points[xAmount].y + " Top-Left: " + points[yAmount * (xAmount + 1)].y + " Top-Right: " + points[(yAmount * (xAmount + 1)) + xAmount].y);
+        
         points.Dispose();
         nativeUVs.Dispose();
         
@@ -198,6 +210,8 @@ public class WorldGenerator : MonoBehaviour
             stopwatch.Stop();
             Debug.LogFormat("[WorldGenerator::GenerateTerrain] Execution time: {0}ms", stopwatch.ElapsedMilliseconds);
         }
+
+        return terrain;
     }
 
     // Job to generate vertex positions for each point on the mesh.
@@ -215,6 +229,7 @@ public class WorldGenerator : MonoBehaviour
         [ReadOnly] public int YAmount;
         [ReadOnly] public float SubDivisions;
         [ReadOnly] public int LevelOfDetail;
+        [ReadOnly] public float2 Position;
         
         public void Execute(int index)
         {
@@ -222,9 +237,15 @@ public class WorldGenerator : MonoBehaviour
             float y = index / (XAmount + 1);
             float u = x / XAmount;
             float v = y / YAmount;
+
+            // float worldX = (x + Offset.x) / SubDivisions * LevelOfDetail;
+            // float worldY = (y + Offset.y) / SubDivisions * LevelOfDetail;
+            float posX = x / SubDivisions * LevelOfDetail;
+            float posY = y / SubDivisions * LevelOfDetail;
             
             // Assign vertex position with calculated fBM height.
-            Points[index] = new float3(x / SubDivisions * LevelOfDetail, FractalNoise.CalculateNoise(u, v, Seed, Frequency, Octaves, Offset) * Amplitude, y / SubDivisions * LevelOfDetail);
+            // Points[index] = new float3(worldX, FractalNoise.CalculateNoise(worldX, worldY, Seed, Frequency, Octaves, Offset) * Amplitude, worldY);
+            Points[index] = new float3(posX, FractalNoise.CalculateNoise(posX, posY, Seed, Frequency, Octaves, Offset) * Amplitude, posY);
             
             UVs[index] = new float2(u, v);
         }
