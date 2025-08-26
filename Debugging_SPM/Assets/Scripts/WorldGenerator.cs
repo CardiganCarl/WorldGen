@@ -98,13 +98,13 @@ public class WorldGenerator : MonoBehaviour
         int xAmount = (int)(width * subDivisions) / levelOfDetail;
         int yAmount = (int)(height * subDivisions) / levelOfDetail;
         
-        NativeArray<float3> points = new NativeArray<float3>((xAmount + 1) * (yAmount + 1), Allocator.TempJob);
+        NativeArray<float3> nativeVertices = new NativeArray<float3>((xAmount + 1) * (yAmount + 1), Allocator.TempJob);
         NativeArray<float2> nativeUVs = new NativeArray<float2>((xAmount + 1) * (yAmount + 1), Allocator.TempJob);
         
         // Calculate the position for each vertex on the mesh.
         CalculateVertexPosition vertexPositionJob = new CalculateVertexPosition()
         {
-            Points = points,
+            Vertices = nativeVertices,
             UVs = nativeUVs,
             Seed = seed,
             Amplitude = amplitude,
@@ -116,20 +116,20 @@ public class WorldGenerator : MonoBehaviour
             SubDivisions = subDivisions,
             LevelOfDetail = levelOfDetail,
         };
-        JobHandle handle = vertexPositionJob.Schedule(points.Length, 64);
+        JobHandle handle = vertexPositionJob.Schedule(nativeVertices.Length, 64);
         handle.Complete();
         
-        Vector3[] vertices = new Vector3[points.Length];
-        Vector2[] uvs = new Vector2[points.Length];
-        Color[] colors = new Color[points.Length];
+        Vector3[] vertices = new Vector3[nativeVertices.Length];
+        Vector2[] uvs = new Vector2[nativeVertices.Length];
+        Color[] colors = new Color[nativeVertices.Length];
 
         for (int i = 0; i < vertices.Length; i++)
         {
-            vertices[i] = points[i];
+            vertices[i] = nativeVertices[i];
             
             // Multiply the height with the curve value at that point.
             // This makes water for example be flat on the mesh, but mountains more pronounced.
-            vertices[i].y *= meshHeightCurve.Evaluate(GetNormalizedHeight(points[i].y));
+            vertices[i].y *= meshHeightCurve.Evaluate(GetNormalizedHeight(nativeVertices[i].y));
             
             uvs[i] = nativeUVs[i];
         }
@@ -150,13 +150,13 @@ public class WorldGenerator : MonoBehaviour
             // Assign vertex color depending on which draw mode is selected.
             if (drawMode == DrawMode.Gradients)
             {
-                colors[i] = planeGradient.Evaluate(GetNormalizedHeight(points[i].y));
+                colors[i] = planeGradient.Evaluate(GetNormalizedHeight(nativeVertices[i].y));
             }
             else if (drawMode == DrawMode.Regions)
             {
                 for (int j = 0; j < regions.Length; j++)
                 {
-                    if (GetNormalizedHeight(points[i].y) < regions[j].height)
+                    if (GetNormalizedHeight(nativeVertices[i].y) < regions[j].height)
                     {
                         colors[i] = regions[j].color;
                         break;
@@ -165,17 +165,17 @@ public class WorldGenerator : MonoBehaviour
             }
             else if (drawMode == DrawMode.Greyscale)
             {
-                colors[i] = Color.Lerp(Color.black, Color.white, GetNormalizedHeight(points[i].y));
+                colors[i] = Color.Lerp(Color.black, Color.white, GetNormalizedHeight(nativeVertices[i].y));
             }
             else if (drawMode == DrawMode.Textures)
             {
-                colors[i] = new Color(GetNormalizedHeight(points[i].y), 0, 0);
+                colors[i] = new Color(GetNormalizedHeight(nativeVertices[i].y), 0, 0);
             }
             
             // Apply fake AO to darken areas with big height changes.
             // TODO: Replace with a better approximation (sweep-based hemisphere sampling).
-            float avgNeighborHeight = GetNeighboringHeight(points, i, xAmount, yAmount);
-            float ao = CalculateAOAmount(points[i].y, avgNeighborHeight, aoScale, amplitude);
+            float avgNeighborHeight = GetNeighboringHeight(nativeVertices, i, xAmount, yAmount);
+            float ao = CalculateAOAmount(nativeVertices[i].y, avgNeighborHeight, aoScale, amplitude);
             colors[i] *= ao;
         }
 
@@ -198,10 +198,7 @@ public class WorldGenerator : MonoBehaviour
         mesh.RecalculateNormals();
         mesh.RecalculateTangents();
         
-        Debug.Log("World pos: " + posOffset);
-        Debug.Log("Bottom-Left: " + points[0].y + " Bottom-Right: " + points[xAmount].y + " Top-Left: " + points[yAmount * (xAmount + 1)].y + " Top-Right: " + points[(yAmount * (xAmount + 1)) + xAmount].y);
-        
-        points.Dispose();
+        nativeVertices.Dispose();
         nativeUVs.Dispose();
         
         // Logging
@@ -218,7 +215,7 @@ public class WorldGenerator : MonoBehaviour
     [BurstCompile]
     private struct CalculateVertexPosition : IJobParallelFor
     {
-        public NativeArray<float3> Points;
+        public NativeArray<float3> Vertices;
         public NativeArray<float2> UVs;
         [ReadOnly] public uint Seed;
         [ReadOnly] public float Amplitude;
@@ -237,15 +234,12 @@ public class WorldGenerator : MonoBehaviour
             float y = index / (XAmount + 1);
             float u = x / XAmount;
             float v = y / YAmount;
-
-            // float worldX = (x + Offset.x) / SubDivisions * LevelOfDetail;
-            // float worldY = (y + Offset.y) / SubDivisions * LevelOfDetail;
+            
             float posX = x / SubDivisions * LevelOfDetail;
             float posY = y / SubDivisions * LevelOfDetail;
             
             // Assign vertex position with calculated fBM height.
-            // Points[index] = new float3(worldX, FractalNoise.CalculateNoise(worldX, worldY, Seed, Frequency, Octaves, Offset) * Amplitude, worldY);
-            Points[index] = new float3(posX, FractalNoise.CalculateNoise(posX, posY, Seed, Frequency, Octaves, Offset) * Amplitude, posY);
+            Vertices[index] = new float3(posX, FractalNoise.CalculateNoise(posX, posY, Seed, Frequency, Octaves, Offset) * Amplitude, posY);
             
             UVs[index] = new float2(u, v);
         }
