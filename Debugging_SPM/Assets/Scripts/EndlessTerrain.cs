@@ -7,9 +7,9 @@ public class EndlessTerrain : MonoBehaviour
 {
     public const float viewDistance = 300;
     public Transform viewer;
-    public static Vector2 viewerPosition;
     
-    private int chunkSize = 100;
+    private static Vector2 viewerPosition;
+    private const int chunkSize = 100;
     private int visibleChunks;
     private WorldGenerator worldGenerator;
     
