@@ -428,7 +428,7 @@ MonoBehaviour:
   - name: Snow
     height: 1
     color: {r: 0.83281416, g: 0.8962264, b: 0.89502156, a: 0}
-  frequency: 0.015
+  frequency: 0.007
   amplitude: 45
   meshHeightCurve:
     serializedVersion: 2
@@ -452,13 +452,22 @@ MonoBehaviour:
       inWeight: 0.114428855
       outWeight: 0.11382304
     - serializedVersion: 3
-      time: 1
-      value: 1
-      inSlope: 2
-      outSlope: 2
+      time: 0.5403822
+      value: 0.63730717
+      inSlope: 2.6340518
+      outSlope: 2.6340518
       tangentMode: 0
       weightedMode: 0
-      inWeight: 0
+      inWeight: 0.33333334
+      outWeight: 0.057417337
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: -0
+      outSlope: -0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.17262904
       outWeight: 0
     m_PreInfinity: 2
     m_PostInfinity: 2
