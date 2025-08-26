@@ -41,7 +41,7 @@ public class FractalNoise : MonoBehaviour
         for (int i = 0; i < octaves; i++)
         {
             // Add to the sum of the total noise by calculating perlin noise.
-            noise += PerlinNoise.CalculateNoise(x * frequency + octaveOffsets[i].x, y * frequency + octaveOffsets[i].y) * amplitude;
+            noise += PerlinNoise.CalculateNoise((x + octaveOffsets[i].x) * frequency, (y + octaveOffsets[i].y) * frequency) * amplitude;
             maxNoise += amplitude;
             
             // Multiply amplitude and frequency, making for changes in the resulting noise for each octave step in the loop.
