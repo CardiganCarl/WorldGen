@@ -396,7 +396,7 @@ MonoBehaviour:
   height: 100
   subDivisions: 1
   levelOfDetail: 1
-  logPerformance: 1
+  logPerformance: 0
   autoUpdate: 0
   drawMode: 3
   aoScale: 1
@@ -452,8 +452,8 @@ MonoBehaviour:
       inWeight: 0.114428855
       outWeight: 0.11382304
     - serializedVersion: 3
-      time: 0.5403822
-      value: 0.63730717
+      time: 0.5499647
+      value: 0.64301395
       inSlope: 2.6340518
       outSlope: 2.6340518
       tangentMode: 0
@@ -474,7 +474,6 @@ MonoBehaviour:
     m_RotationOrder: 4
   octaves: 6
   seed: 1
-  offset: {x: 0, y: 0}
   textureShaderMaterial: {fileID: 2100000, guid: e081cc9b529206548b73f548ccae8af9, type: 2}
   vertexColorMaterial: {fileID: 2100000, guid: 9999fc65d025a1a42bf616799fbc95d4, type: 2}
   planeGradient:
