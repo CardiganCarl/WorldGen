@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using Unity.Jobs;
 using Unity.Collections;
@@ -41,8 +42,7 @@ public class WorldGenerator : MonoBehaviour
 	public AnimationCurve meshHeightCurve;
     public int octaves = 4;
     public uint seed = 1;
-    public Vector2 offset;
-
+    
     [Header("Materials")] 
     public Material textureShaderMaterial;
     public Material vertexColorMaterial;
@@ -60,27 +60,7 @@ public class WorldGenerator : MonoBehaviour
     private MeshFilter meshFilter;
     private Dictionary<(int, int), int[]> computedTriangles = new();
 
-    [ContextMenu("Generate Terrain")]
-    public void GenerateTerrain()
-    {
-        // The plane does not exist, or the amount of vertices in it has changed.
-        if (!plane || width != previousWidth || height != previousHeight || subDivisions != previousSubDivisions || levelOfDetail != previousLevelOfDetail)
-        {
-            DestroyWorld();
-            plane = CreatePlane();
-            previousWidth = width;
-            previousHeight = height;
-            previousSubDivisions = subDivisions;
-            previousLevelOfDetail = levelOfDetail;
-            mesh = new Mesh();
-            meshFilter = plane.GetComponent<MeshFilter>();
-        }
-        
-        GenerateTerrain(offset);
-    }
-
-    // Generates a procedural terrain mesh based on fractal brownian motion.
-    public GameObject GenerateTerrain(Vector2 posOffset)
+    public GameObject GenerateTerrain(MeshInfo meshInfo)
     {
         // Log execution time.
         System.Diagnostics.Stopwatch stopwatch = null;
@@ -90,10 +70,118 @@ public class WorldGenerator : MonoBehaviour
             stopwatch.Start();
         }
         
-        GameObject terrain = CreatePlane();
+        meshInfo.vertexPosHandle.Complete();
+        
+        GameObject terrain = GameObject.CreatePrimitive(PrimitiveType.Plane);
+        terrain.transform.position = new Vector3(meshInfo.offset.x, 0, meshInfo.offset.y);
+        terrain.transform.localScale = Vector3.one;
+        terrain.transform.parent = transform;
+        
         MeshFilter meshFilter = terrain.GetComponent<MeshFilter>();
         Mesh mesh = meshFilter.mesh;
 
+        // Get the amount of vertices.
+        int xAmount = (int)(width * subDivisions) / levelOfDetail;
+        int yAmount = (int)(height * subDivisions) / levelOfDetail;
+        int containerLength = (xAmount + 1) * (yAmount + 1);
+        
+        Vector3[] vertices = new Vector3[containerLength];
+        Vector2[] uvs = new Vector2[containerLength];
+        Color[] colors = new Color[containerLength];
+
+        for (int i = 0; i < vertices.Length; i++)
+        {
+            vertices[i] = meshInfo.vertices[i];
+            
+            // Multiply the height with the curve value at that point.
+            // This makes water for example be flat on the mesh, but mountains more pronounced.
+            vertices[i].y *= meshHeightCurve.Evaluate(GetNormalizedHeight(meshInfo.vertices[i].y));
+            
+            uvs[i] = meshInfo.uvs[i];
+        }
+        
+        // Dispose the temporary native arrays.
+        meshInfo.vertices.Dispose();
+        meshInfo.uvs.Dispose();
+        
+        // Set the material.
+        if (drawMode == DrawMode.Textures)
+        {
+            terrain.GetComponent<Renderer>().sharedMaterial = textureShaderMaterial;
+        }
+        else
+        {
+            terrain.GetComponent<Renderer>().sharedMaterial = vertexColorMaterial;
+        }
+        
+        // Apply per-vertex colors.
+        for (int i = 0; i < vertices.Length; i++)
+        {
+            // Assign vertex color depending on which draw mode is selected.
+            if (drawMode == DrawMode.Gradients)
+            {
+                colors[i] = planeGradient.Evaluate(GetNormalizedHeight(vertices[i].y));
+            }
+            else if (drawMode == DrawMode.Regions)
+            {
+                for (int j = 0; j < regions.Length; j++)
+                {
+                    if (GetNormalizedHeight(vertices[i].y) < regions[j].height)
+                    {
+                        colors[i] = regions[j].color;
+                        break;
+                    }
+                }
+            }
+            else if (drawMode == DrawMode.Greyscale)
+            {
+                colors[i] = Color.Lerp(Color.black, Color.white, GetNormalizedHeight(vertices[i].y));
+            }
+            else if (drawMode == DrawMode.Textures)
+            {
+                colors[i] = new Color(GetNormalizedHeight(vertices[i].y), 0, 0);
+            }
+            
+            // Apply fake AO to darken areas with big height changes.
+            // TODO: Replace with a better approximation (sweep-based hemisphere sampling).
+            float avgNeighborHeight = GetNeighboringHeight(vertices, i, xAmount, yAmount);
+            float ao = CalculateAOAmount(vertices[i].y, avgNeighborHeight, aoScale, amplitude);
+            colors[i] *= ao;
+        }
+        
+        // Compute triangles if not done for this width and height already.
+        if (!computedTriangles.ContainsKey((xAmount, yAmount)))
+        {
+            computedTriangles.Add((xAmount, yAmount), CalculateTriangles(xAmount, yAmount));
+        }
+        int[] triangles = computedTriangles[(xAmount, yAmount)];
+        
+        // Assign new mesh values.
+        mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+        mesh.vertices = vertices;
+        mesh.triangles = triangles;
+        mesh.colors = colors;
+        mesh.uv = uvs;
+        
+        meshFilter.mesh = mesh;
+        mesh.RecalculateBounds();
+        mesh.RecalculateNormals();
+        mesh.RecalculateTangents();
+        
+        // Logging
+        if (stopwatch != null)
+        {
+            stopwatch.Stop();
+            Debug.LogFormat("[WorldGenerator::GenerateTerrain] Execution time: {0}ms", stopwatch.ElapsedMilliseconds);
+        }
+
+        return terrain;
+    }
+
+    public MeshInfo GenerateMeshInfo(Vector2 posOffset)
+    {
+        MeshInfo meshInfo = new MeshInfo();
+        
         // Get the amount of vertices.
         int xAmount = (int)(width * subDivisions) / levelOfDetail;
         int yAmount = (int)(height * subDivisions) / levelOfDetail;
@@ -116,99 +204,12 @@ public class WorldGenerator : MonoBehaviour
             SubDivisions = subDivisions,
             LevelOfDetail = levelOfDetail,
         };
-        JobHandle handle = vertexPositionJob.Schedule(nativeVertices.Length, 64);
-        handle.Complete();
+        meshInfo.vertexPosHandle = vertexPositionJob.Schedule(nativeVertices.Length, 64);
+        meshInfo.vertices = nativeVertices;
+        meshInfo.uvs = nativeUVs;
+        meshInfo.offset = posOffset;
         
-        Vector3[] vertices = new Vector3[nativeVertices.Length];
-        Vector2[] uvs = new Vector2[nativeVertices.Length];
-        Color[] colors = new Color[nativeVertices.Length];
-
-        for (int i = 0; i < vertices.Length; i++)
-        {
-            vertices[i] = nativeVertices[i];
-            
-            // Multiply the height with the curve value at that point.
-            // This makes water for example be flat on the mesh, but mountains more pronounced.
-            vertices[i].y *= meshHeightCurve.Evaluate(GetNormalizedHeight(nativeVertices[i].y));
-            
-            uvs[i] = nativeUVs[i];
-        }
-        
-        // Set the material.
-        if (drawMode == DrawMode.Textures)
-        {
-            terrain.GetComponent<Renderer>().sharedMaterial = textureShaderMaterial;
-        }
-        else
-        {
-            terrain.GetComponent<Renderer>().sharedMaterial = vertexColorMaterial;
-        }
-        
-        // Apply per-vertex colors.
-        for (int i = 0; i < vertices.Length; i++)
-        {
-            // Assign vertex color depending on which draw mode is selected.
-            if (drawMode == DrawMode.Gradients)
-            {
-                colors[i] = planeGradient.Evaluate(GetNormalizedHeight(nativeVertices[i].y));
-            }
-            else if (drawMode == DrawMode.Regions)
-            {
-                for (int j = 0; j < regions.Length; j++)
-                {
-                    if (GetNormalizedHeight(nativeVertices[i].y) < regions[j].height)
-                    {
-                        colors[i] = regions[j].color;
-                        break;
-                    }
-                }
-            }
-            else if (drawMode == DrawMode.Greyscale)
-            {
-                colors[i] = Color.Lerp(Color.black, Color.white, GetNormalizedHeight(nativeVertices[i].y));
-            }
-            else if (drawMode == DrawMode.Textures)
-            {
-                colors[i] = new Color(GetNormalizedHeight(nativeVertices[i].y), 0, 0);
-            }
-            
-            // Apply fake AO to darken areas with big height changes.
-            // TODO: Replace with a better approximation (sweep-based hemisphere sampling).
-            float avgNeighborHeight = GetNeighboringHeight(nativeVertices, i, xAmount, yAmount);
-            float ao = CalculateAOAmount(nativeVertices[i].y, avgNeighborHeight, aoScale, amplitude);
-            colors[i] *= ao;
-        }
-
-        // Compute triangles if not done for this width and height already.
-        if (!computedTriangles.ContainsKey((xAmount, yAmount)))
-        {
-            computedTriangles.Add((xAmount, yAmount), CalculateTriangles(xAmount, yAmount));
-        }
-        int[] triangles = computedTriangles[(xAmount, yAmount)];
-        
-        // Assign new mesh values.
-        mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-        mesh.vertices = vertices;
-        mesh.triangles = triangles;
-        mesh.colors = colors;
-        mesh.uv = uvs;
-        
-        meshFilter.mesh = mesh;
-        mesh.RecalculateBounds();
-        mesh.RecalculateNormals();
-        mesh.RecalculateTangents();
-        
-        nativeVertices.Dispose();
-        nativeUVs.Dispose();
-        
-        // Logging
-        if (stopwatch != null)
-        {
-            stopwatch.Stop();
-            Debug.LogFormat("[WorldGenerator::GenerateTerrain] Execution time: {0}ms", stopwatch.ElapsedMilliseconds);
-        }
-
-        return terrain;
+        return meshInfo;
     }
 
     // Job to generate vertex positions for each point on the mesh.
@@ -260,7 +261,7 @@ public class WorldGenerator : MonoBehaviour
     }
 
     // Get the average height of the points neighbors.
-    private static float GetNeighboringHeight(NativeArray<float3> vertices, int index, int xAmount, int yAmount)
+    private static float GetNeighboringHeight(Vector3[] vertices, int index, int xAmount, int yAmount)
     {
         int count = 0;
         float sum = 0.0f;
@@ -345,7 +346,6 @@ public class WorldGenerator : MonoBehaviour
         GameObject plane = GameObject.CreatePrimitive(PrimitiveType.Plane);
         
         plane.transform.localScale = new Vector3(width, 1, height);
-        
         plane.transform.position = new Vector3(width * 0.5f - 0.5f, 0.0f, height * 0.5f - 0.5f);
         plane.transform.SetParent(transform);
         
@@ -361,4 +361,12 @@ public struct TerrainType
     public string name;
     public float height;
     public Color color;
+}
+
+public struct MeshInfo
+{
+    public NativeArray<float3> vertices;
+    public NativeArray<float2> uvs;
+    public JobHandle vertexPosHandle;
+    public Vector2 offset;
 }
