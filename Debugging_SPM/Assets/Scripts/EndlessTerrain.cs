@@ -6,7 +6,7 @@ using UnityEngine;
 
 public class EndlessTerrain : MonoBehaviour
 {
-    public const float viewDistance = 300;
+    public const float viewDistance = 600;
     public Transform viewer;
     
     private static Vector2 viewerPosition;

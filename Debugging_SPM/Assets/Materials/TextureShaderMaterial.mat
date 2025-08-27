@@ -142,7 +142,7 @@ Material:
     - _GlossMapScale: 1
     - _Glossiness: 0.5
     - _GlossyReflections: 1
-    - _Grass_height: 0.2
+    - _Grass_height: 0.1
     - _Metallic: 0
     - _Mode: 0
     - _OcclusionStrength: 1
@@ -150,7 +150,7 @@ Material:
     - _QueueControl: 0
     - _QueueOffset: 0
     - _Rock_height: 0.4
-    - _Sand_height: 0.05
+    - _Sand_height: 0
     - _SmoothnessTextureChannel: 0
     - _Snow_height: 0.7
     - _SpecularHighlights: 1
