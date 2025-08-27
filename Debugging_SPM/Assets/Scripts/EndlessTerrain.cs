@@ -17,10 +17,8 @@ public class EndlessTerrain : MonoBehaviour
     Dictionary<Vector2, TerrainChunk> chunks = new();
     List<TerrainChunk> previouslyVisibleChunks = new();
     
-    private ConcurrentQueue<MeshInfo> meshesToProcess = new();
+    private ConcurrentQueue<MeshInfo> meshInfoToProcess = new();
     private List<Vector2> positionsBeingCalculated = new();
-    
-    private Vector2 previousPosition;
     
     // Start is called before the first frame update
     void Start()
@@ -38,17 +36,19 @@ public class EndlessTerrain : MonoBehaviour
 
     private void ProcessMeshes()
     {
-        if (!meshesToProcess.IsEmpty)
+        if (!meshInfoToProcess.IsEmpty)
         {
-            meshesToProcess.TryPeek(out MeshInfo meshInfo);
+            meshInfoToProcess.TryPeek(out MeshInfo meshInfo);
             if (meshInfo.vertexPosHandle.IsCompleted)
             {
-                meshesToProcess.TryDequeue(out MeshInfo m);
+                // Take a meshInfo from the queue and process it into a terrain object.
+                meshInfoToProcess.TryDequeue(out MeshInfo m);
                 GameObject terrain = worldGenerator.GenerateTerrain(m);
                 
                 Vector2 coord = new Vector2(terrain.transform.position.x, terrain.transform.position.z) / chunkSize;
                 
-                TerrainChunk chunk = new TerrainChunk(coord, chunkSize, transform, terrain);
+                // Create the chunk and add it to the current chunks.
+                TerrainChunk chunk = new TerrainChunk(coord, chunkSize, terrain);
                 chunks.Add(coord, chunk);
                 
                 positionsBeingCalculated.Remove(coord);
@@ -58,6 +58,7 @@ public class EndlessTerrain : MonoBehaviour
 
     void UpdateVisibleChunks()
     {
+        // Hide all chunks.
         foreach (TerrainChunk t in previouslyVisibleChunks)
         {
             t.SetVisible(false);
@@ -67,6 +68,7 @@ public class EndlessTerrain : MonoBehaviour
         int currentChunkCoordX = Mathf.RoundToInt(viewerPosition.x / chunkSize);
         int currentChunkCoordY = Mathf.RoundToInt(viewerPosition.y / chunkSize);
 
+        // Loop over all visible chunks.
         for (int yOffset = -visibleChunks; yOffset <= visibleChunks; yOffset++)
         {
             for (int xOffset = -visibleChunks; xOffset <= visibleChunks; xOffset++)
@@ -75,6 +77,7 @@ public class EndlessTerrain : MonoBehaviour
 
                 if (chunks.ContainsKey(viewedChunkCoord))
                 {
+                    // Update visibility.
                     chunks[viewedChunkCoord].UpdateChunk();
                     if (chunks[viewedChunkCoord].IsVisible())
                     {
@@ -83,10 +86,10 @@ public class EndlessTerrain : MonoBehaviour
                 }
                 else
                 {
-                    // chunks.Add(viewedChunkCoord, new TerrainChunk(viewedChunkCoord, chunkSize, transform, worldGenerator));
                     if (!positionsBeingCalculated.Contains(viewedChunkCoord))
                     {
-                        meshesToProcess.Enqueue(worldGenerator.GenerateMeshInfo(viewedChunkCoord * chunkSize));
+                        // Create a new chunk.
+                        meshInfoToProcess.Enqueue(worldGenerator.GenerateMeshInfo(viewedChunkCoord * chunkSize));
                         positionsBeingCalculated.Add(viewedChunkCoord);
                     }
                 }
@@ -100,24 +103,16 @@ public class EndlessTerrain : MonoBehaviour
         private Vector2 position;
         private Bounds bounds;
         
-        public TerrainChunk(Vector2 coord, int size, Transform parent, GameObject terrain)
+        public TerrainChunk(Vector2 coord, int size, GameObject terrain)
         {
             position = coord * size;
             bounds = new Bounds(position, Vector2.one * size);
-            Vector3 positionV3 = new Vector3(position.x, 0, position.y);
-            
-            // meshObject = GameObject.CreatePrimitive(PrimitiveType.Plane);
-            // meshObject = generator.GenerateTerrain(position);
-            
             meshObject = terrain;
-            
-            // meshObject.transform.position = positionV3;
-            // meshObject.transform.localScale = Vector3.one;
-            // meshObject.transform.parent = parent;
             
             SetVisible(false);
         }
 
+        // Update visibility.
         public void UpdateChunk()
         {
             float viewerDistance = Mathf.Sqrt(bounds.SqrDistance(viewerPosition));
