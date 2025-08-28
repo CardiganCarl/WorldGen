@@ -49,16 +49,7 @@ public class WorldGenerator : MonoBehaviour
     public Material vertexColorMaterial;
     public Gradient planeGradient;
     
-    private int previousWidth;
-    private int previousHeight;
-    private float previousSubDivisions;
-    private int previousLevelOfDetail;
-    
     // Cached values.
-    private GameObject plane;
-    private Renderer planeRenderer;
-    private Mesh mesh;
-    private MeshFilter meshFilter;
     private Dictionary<(int, int), int[]> computedTriangles = new();
     
     public MeshInfo GenerateMeshInfo(Vector2 posOffset)
@@ -153,7 +144,7 @@ public class WorldGenerator : MonoBehaviour
 
         for (int i = 0; i < vertices.Length; i++)
         {
-            // Copy over mesh info values from native arrays to managed arrays.
+            // Copy over vertex info from native to managed array.
             vertices[i] = meshInfo.vertices[i];
             uvs[i] = meshInfo.uvs[i];
             
@@ -166,12 +157,18 @@ public class WorldGenerator : MonoBehaviour
         meshInfo.vertices.Dispose();
         meshInfo.uvs.Dispose();
         
-        GameObject terrain = GameObject.CreatePrimitive(PrimitiveType.Plane);
-        terrain.transform.position = new Vector3(meshInfo.offset.x, 0, meshInfo.offset.y);
-        terrain.transform.localScale = Vector3.one;
-        terrain.transform.parent = transform;
-        
-        MeshFilter meshFilter = terrain.GetComponent<MeshFilter>();
+        // Create game object and components.
+        GameObject terrain = new GameObject("Terrain")
+        {
+            transform =
+            {
+                position = new Vector3(meshInfo.offset.x, 0, meshInfo.offset.y),
+                localScale = Vector3.one,
+                parent = transform
+            }
+        };
+        MeshFilter meshFilter = terrain.AddComponent<MeshFilter>();
+        terrain.AddComponent<MeshRenderer>();
         Mesh mesh = meshFilter.mesh;
         
         if (drawMode == DrawMode.Textures)
@@ -207,15 +204,16 @@ public class WorldGenerator : MonoBehaviour
         
         // Assign new mesh values.
         mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-        mesh.vertices = vertices;
-        mesh.triangles = triangles;
-        mesh.colors = colors;
-        mesh.uv = uvs;
+        mesh.SetVertices(vertices);
+        mesh.SetTriangles(triangles, 0);
+        mesh.SetColors(colors);
+        mesh.SetUVs(0, uvs);
         
         meshFilter.mesh = mesh;
-        mesh.RecalculateBounds();
         mesh.RecalculateNormals();
-        mesh.RecalculateTangents();
+        
+        // Recalculating tangents is only needed if the shader uses normals, which we currently don't.
+        // mesh.RecalculateTangents();
         
         // Logging
         if (stopwatch != null)
@@ -227,18 +225,18 @@ public class WorldGenerator : MonoBehaviour
         return terrain;
     }
 
-    private Color CalculateColor(float height)
+    private Color CalculateColor(float h)
     {
         // Assign vertex color depending on which draw mode is selected.
         if (drawMode == DrawMode.Gradients)
         {
-            return planeGradient.Evaluate(GetNormalizedHeight(height));
+            return planeGradient.Evaluate(GetNormalizedHeight(h));
         }
         else if (drawMode == DrawMode.Regions)
         {
             for (int j = 0; j < regions.Length; j++)
             {
-                if (GetNormalizedHeight(height) < regions[j].height)
+                if (GetNormalizedHeight(h) < regions[j].height)
                 {
                     return regions[j].color;
                 }
@@ -246,9 +244,9 @@ public class WorldGenerator : MonoBehaviour
         }
         else if (drawMode == DrawMode.Greyscale)
         {
-            return Color.Lerp(Color.black, Color.white, GetNormalizedHeight(height));
+            return Color.Lerp(Color.black, Color.white, GetNormalizedHeight(h));
         }
-        return new Color(GetNormalizedHeight(height), 0, 0);
+        return new Color(GetNormalizedHeight(h), 0, 0);
     }
 
     // Returns the height value normalized to between 0 and 1.
@@ -334,29 +332,6 @@ public class WorldGenerator : MonoBehaviour
         }
         
         return triangles;
-    }
-
-    [ContextMenu("Destroy World")]
-    public void DestroyWorld()
-    {
-        while (transform.childCount > 0)
-        {
-            DestroyImmediate(transform.GetChild(0).gameObject);
-        }
-    }
-
-    private GameObject CreatePlane()
-    {
-        // Create ground plane.
-        GameObject plane = GameObject.CreatePrimitive(PrimitiveType.Plane);
-        
-        plane.transform.localScale = new Vector3(width, 1, height);
-        plane.transform.position = new Vector3(width * 0.5f - 0.5f, 0.0f, height * 0.5f - 0.5f);
-        plane.transform.SetParent(transform);
-        
-        planeRenderer = plane.GetComponent<Renderer>();
-        
-        return plane;
     }
 }
 

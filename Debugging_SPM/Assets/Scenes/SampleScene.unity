@@ -232,9 +232,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   speed: 20
-  horizontalTurnRate: 30
+  horizontalTurnRate: 55
   verticalTurnRate: 20
-  propellerRotation: 200
+  propellerRotation: 240
   propeller: {fileID: 13424185}
 --- !u!1 &705507993
 GameObject:
@@ -396,6 +396,7 @@ MonoBehaviour:
   logPerformance: 0
   autoUpdate: 0
   drawMode: 3
+  applyAO: 0
   aoScale: 1
   regions:
   - name: Water deep
