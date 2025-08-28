@@ -4,19 +4,20 @@ using UnityEngine;
 
 public class FlightController : MonoBehaviour
 {
-    public float speed;
-    public float turnRate;
-    
-    // Start is called before the first frame update
-    void Start()
-    {
-        
-    }
+    [SerializeField]
+    private float speed;
+    [SerializeField]
+    private float turnRate;
+    [SerializeField]
+    private float propellerRotation;
+    [SerializeField]
+    private GameObject propeller;
 
     // Update is called once per frame
     void Update()
     {
         ApplyMovement();
+        RotatePropeller();
     }
 
     private void ApplyMovement()
@@ -38,5 +39,10 @@ public class FlightController : MonoBehaviour
         
         transform.position = newPosition;
         transform.rotation = Quaternion.Euler(newRotation);
+    }
+
+    private void RotatePropeller()
+    {
+        propeller.transform.Rotate(propellerRotation * Time.deltaTime, 0, 0);
     }
 }

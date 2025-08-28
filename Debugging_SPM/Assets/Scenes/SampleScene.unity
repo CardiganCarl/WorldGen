@@ -123,6 +123,11 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
+--- !u!1 &13424185 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 3066009532494511818, guid: a10ea97d1e7447a42a14b05fff673229, type: 3}
+  m_PrefabInstance: {fileID: 114147173}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1001 &114147173
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -228,6 +233,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   speed: 20
   turnRate: 30
+  propellerRotation: 200
+  propeller: {fileID: 13424185}
 --- !u!1 &705507993
 GameObject:
   m_ObjectHideFlags: 0
