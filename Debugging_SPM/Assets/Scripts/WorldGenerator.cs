@@ -33,6 +33,7 @@ public class WorldGenerator : MonoBehaviour
 
     [Header("Appearance")] 
     public DrawMode drawMode;
+    public bool applyAO;
     public float aoScale = 2;
     public TerrainType[] regions;
     
@@ -189,9 +190,12 @@ public class WorldGenerator : MonoBehaviour
             
             // Apply fake AO to darken areas with big height changes.
             // TODO: Replace with a better approximation (sweep-based hemisphere sampling).
-            float avgNeighborHeight = GetNeighboringHeight(vertices, i, xAmount, yAmount);
-            float ao = CalculateAOAmount(vertices[i].y, avgNeighborHeight, aoScale, amplitude);
-            colors[i] *= ao;
+            if (applyAO)
+            {
+                float avgNeighborHeight = GetNeighboringHeight(vertices, i, xAmount, yAmount);
+                float ao = CalculateAOAmount(vertices[i].y, avgNeighborHeight, aoScale, amplitude);
+                colors[i] *= ao;
+            }
         }
         
         // Compute triangles if not done for this width and height already.
