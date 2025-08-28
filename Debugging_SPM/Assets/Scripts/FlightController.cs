@@ -7,7 +7,9 @@ public class FlightController : MonoBehaviour
     [SerializeField]
     private float speed;
     [SerializeField]
-    private float turnRate;
+    private float horizontalTurnRate;
+    [SerializeField]
+    private float verticalTurnRate;
     [SerializeField]
     private float propellerRotation;
     [SerializeField]
@@ -24,21 +26,21 @@ public class FlightController : MonoBehaviour
     {
         Vector3 newPosition = transform.position;
         newPosition += transform.forward * speed * Time.deltaTime;
-        
-        Vector3 newRotation = transform.rotation.eulerAngles;
+        transform.position = newPosition;
         
         if (Input.GetAxis("Vertical") != 0)
         {
-            newPosition.y += Input.GetAxis("Vertical") * speed * Time.deltaTime;
+            // newRotation.x += Input.GetAxis("Vertical") * speed * Time.deltaTime;
+            transform.Rotate(Input.GetAxis("Vertical") * verticalTurnRate * Time.deltaTime, 0, 0);
         }
 
         if (Input.GetAxis("Horizontal") != 0)
         {
-            newRotation.y += Input.GetAxis("Horizontal") * turnRate * Time.deltaTime;
+            // newRotation.z -= Input.GetAxis("Horizontal") * turnRate * Time.deltaTime;
+            transform.Rotate(0, 0, -Input.GetAxis("Horizontal") * horizontalTurnRate * Time.deltaTime);
         }
         
-        transform.position = newPosition;
-        transform.rotation = Quaternion.Euler(newRotation);
+        // transform.rotation = Quaternion.Euler(newRotation);
     }
 
     private void RotatePropeller()

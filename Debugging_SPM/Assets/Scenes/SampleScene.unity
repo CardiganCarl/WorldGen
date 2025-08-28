@@ -232,7 +232,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   speed: 20
-  turnRate: 30
+  horizontalTurnRate: 30
+  verticalTurnRate: 20
   propellerRotation: 200
   propeller: {fileID: 13424185}
 --- !u!1 &705507993
