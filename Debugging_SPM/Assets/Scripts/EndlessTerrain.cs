@@ -36,22 +36,29 @@ public class EndlessTerrain : MonoBehaviour
 
     private void ProcessMeshes()
     {
-        if (!meshInfoToProcess.IsEmpty)
+        int count = meshInfoToProcess.Count;
+        for (int i = 0; i < count; i++)
         {
-            meshInfoToProcess.TryPeek(out MeshInfo meshInfo);
-            if (meshInfo.vertexPosHandle.IsCompleted)
+            if (meshInfoToProcess.TryDequeue(out MeshInfo meshInfo))
             {
-                // Take a meshInfo from the queue and process it into a terrain object.
-                meshInfoToProcess.TryDequeue(out MeshInfo m);
-                GameObject terrain = worldGenerator.GenerateTerrain(m);
+                if (meshInfo.vertexPosHandle.IsCompleted)
+                {
+                    // Take a meshInfo from the queue and process it into a terrain object.
+                    GameObject terrain = worldGenerator.GenerateTerrain(meshInfo);
                 
-                Vector2 coord = new Vector2(terrain.transform.position.x, terrain.transform.position.z) / chunkSize;
+                    Vector2 coord = new Vector2(terrain.transform.position.x, terrain.transform.position.z) / chunkSize;
                 
-                // Create the chunk and add it to the current chunks.
-                TerrainChunk chunk = new TerrainChunk(coord, chunkSize, terrain);
-                chunks.Add(coord, chunk);
+                    // Create the chunk and add it to the current chunks.
+                    TerrainChunk chunk = new TerrainChunk(coord, chunkSize, terrain);
+                    chunks.Add(coord, chunk);
                 
-                positionsBeingCalculated.Remove(coord);
+                    positionsBeingCalculated.Remove(coord);
+                }
+                else
+                {
+                    // Place the chunk at the end of the queue to check next frame.
+                    meshInfoToProcess.Enqueue(meshInfo);
+                }
             }
         }
     }
