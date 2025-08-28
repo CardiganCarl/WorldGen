@@ -1,13 +1,16 @@
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using Unity.VisualScripting;
 using UnityEngine;
+using Debug = UnityEngine.Debug;
 
 public class EndlessTerrain : MonoBehaviour
 {
     public const float viewDistance = 600;
     public Transform viewer;
+    public int maxChunksPerFrame = 2;
     
     private static Vector2 viewerPosition;
     private const int chunkSize = 100;
@@ -36,8 +39,12 @@ public class EndlessTerrain : MonoBehaviour
 
     private void ProcessMeshes()
     {
+        UnityEngine.Profiling.Profiler.BeginSample("LolXD");
+        
         int count = meshInfoToProcess.Count;
-        for (int i = 0; i < count; i++)
+        int processedChunks = 0;
+        
+        for (int i = 0; i < count && processedChunks < maxChunksPerFrame; i++)
         {
             if (meshInfoToProcess.TryDequeue(out MeshInfo meshInfo))
             {
@@ -53,6 +60,7 @@ public class EndlessTerrain : MonoBehaviour
                     chunks.Add(coord, chunk);
                 
                     positionsBeingCalculated.Remove(coord);
+                    processedChunks++;
                 }
                 else
                 {

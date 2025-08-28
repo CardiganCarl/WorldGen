@@ -532,6 +532,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   viewer: {fileID: 299117689}
+  maxChunksPerFrame: 3
 --- !u!1 &1843390243
 GameObject:
   m_ObjectHideFlags: 0
