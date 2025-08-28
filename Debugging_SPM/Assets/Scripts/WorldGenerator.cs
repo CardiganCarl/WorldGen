@@ -203,7 +203,6 @@ public class WorldGenerator : MonoBehaviour
         int[] triangles = computedTriangles[(xAmount, yAmount)];
         
         // Assign new mesh values.
-        mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
         mesh.SetVertices(vertices);
         mesh.SetTriangles(triangles, 0);
         mesh.SetColors(colors);

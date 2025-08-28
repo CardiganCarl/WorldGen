@@ -69,6 +69,8 @@ public class EndlessTerrain : MonoBehaviour
                 }
             }
         }
+        
+        UnityEngine.Profiling.Profiler.EndSample();
     }
 
     void UpdateVisibleChunks()
