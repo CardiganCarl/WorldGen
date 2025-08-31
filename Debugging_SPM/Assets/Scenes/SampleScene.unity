@@ -531,7 +531,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   viewer: {fileID: 299117689}
-  maxChunksPerFrame: 2
   lodDistances:
   - LOD: 1
     visibleThreshold: 200
@@ -540,7 +539,7 @@ MonoBehaviour:
   - LOD: 4
     visibleThreshold: 500
   - LOD: 5
-    visibleThreshold: 600
+    visibleThreshold: 650
 --- !u!1 &1843390243
 GameObject:
   m_ObjectHideFlags: 0
