@@ -26,8 +26,6 @@ public class WorldGenerator : MonoBehaviour
     public int width = 200;
     public int height = 200;
     public float subDivisions = 1;
-    [Range(1, 6)]
-    public int levelOfDetail;
     public bool logPerformance;
     public bool autoUpdate;
 
@@ -52,7 +50,7 @@ public class WorldGenerator : MonoBehaviour
     // Cached values.
     private Dictionary<(int, int), int[]> computedTriangles = new();
     
-    public MeshInfo GenerateMeshInfo(Vector2 posOffset)
+    public MeshInfo GenerateMeshInfo(Vector2 posOffset, int levelOfDetail)
     {
         MeshInfo meshInfo = new MeshInfo();
         
@@ -82,6 +80,7 @@ public class WorldGenerator : MonoBehaviour
         meshInfo.vertices = nativeVertices;
         meshInfo.uvs = nativeUVs;
         meshInfo.offset = posOffset;
+        meshInfo.LOD = levelOfDetail;
         
         return meshInfo;
     }
@@ -134,8 +133,8 @@ public class WorldGenerator : MonoBehaviour
         meshInfo.vertexPosHandle.Complete();
 
         // Get the amount of vertices.
-        int xAmount = (int)(width * subDivisions) / levelOfDetail;
-        int yAmount = (int)(height * subDivisions) / levelOfDetail;
+        int xAmount = (int)(width * subDivisions) / meshInfo.LOD;
+        int yAmount = (int)(height * subDivisions) / meshInfo.LOD;
         int containerLength = (xAmount + 1) * (yAmount + 1);
         
         Vector3[] vertices = new Vector3[containerLength];
@@ -158,7 +157,7 @@ public class WorldGenerator : MonoBehaviour
         meshInfo.uvs.Dispose();
         
         // Create game object and components.
-        GameObject terrain = new GameObject("Terrain")
+        GameObject terrain = new GameObject("Terrain, LOD: " + meshInfo.LOD)
         {
             transform =
             {
@@ -348,4 +347,5 @@ public struct MeshInfo
     public NativeArray<float2> uvs;
     public JobHandle vertexPosHandle;
     public Vector2 offset;
+    public int LOD;
 }

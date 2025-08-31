@@ -5,13 +5,13 @@ using System.Diagnostics;
 using Unity.VisualScripting;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
+using Update = UnityEngine.PlayerLoop.Update;
 
 public class EndlessTerrain : MonoBehaviour
 {
-    public const float viewDistance = 600;
     public Transform viewer;
-    public int maxChunksPerFrame = 2;
     
+    private static float viewDistance;
     private static Vector2 viewerPosition;
     private const int chunkSize = 100;
     private int visibleChunks;
@@ -20,12 +20,13 @@ public class EndlessTerrain : MonoBehaviour
     Dictionary<Vector2, TerrainChunk> chunks = new();
     List<TerrainChunk> previouslyVisibleChunks = new();
     
-    private ConcurrentQueue<MeshInfo> meshInfoToProcess = new();
-    private List<Vector2> positionsBeingCalculated = new();
+    [SerializeField]
+    private LODInfo[] lodDistances;
     
     // Start is called before the first frame update
     void Start()
     {
+        viewDistance = lodDistances[^1].visibleThreshold;
         visibleChunks = Mathf.RoundToInt(viewDistance / chunkSize);
         worldGenerator = GetComponent<WorldGenerator>();
     }
@@ -34,43 +35,6 @@ public class EndlessTerrain : MonoBehaviour
     {
         viewerPosition = new Vector2(viewer.position.x, viewer.position.z);
         UpdateVisibleChunks();
-        ProcessMeshes();
-    }
-
-    private void ProcessMeshes()
-    {
-        UnityEngine.Profiling.Profiler.BeginSample("LolXD");
-        
-        int count = meshInfoToProcess.Count;
-        int processedChunks = 0;
-        
-        for (int i = 0; i < count && processedChunks < maxChunksPerFrame; i++)
-        {
-            if (meshInfoToProcess.TryDequeue(out MeshInfo meshInfo))
-            {
-                if (meshInfo.vertexPosHandle.IsCompleted)
-                {
-                    // Take a meshInfo from the queue and process it into a terrain object.
-                    GameObject terrain = worldGenerator.GenerateTerrain(meshInfo);
-                
-                    Vector2 coord = new Vector2(terrain.transform.position.x, terrain.transform.position.z) / chunkSize;
-                
-                    // Create the chunk and add it to the current chunks.
-                    TerrainChunk chunk = new TerrainChunk(coord, chunkSize, terrain);
-                    chunks.Add(coord, chunk);
-                
-                    positionsBeingCalculated.Remove(coord);
-                    processedChunks++;
-                }
-                else
-                {
-                    // Place the chunk at the end of the queue to check next frame.
-                    meshInfoToProcess.Enqueue(meshInfo);
-                }
-            }
-        }
-        
-        UnityEngine.Profiling.Profiler.EndSample();
     }
 
     void UpdateVisibleChunks()
@@ -103,12 +67,8 @@ public class EndlessTerrain : MonoBehaviour
                 }
                 else
                 {
-                    if (!positionsBeingCalculated.Contains(viewedChunkCoord))
-                    {
-                        // Create a new chunk.
-                        meshInfoToProcess.Enqueue(worldGenerator.GenerateMeshInfo(viewedChunkCoord * chunkSize));
-                        positionsBeingCalculated.Add(viewedChunkCoord);
-                    }
+                    TerrainChunk chunk = new TerrainChunk(viewedChunkCoord, chunkSize, lodDistances, worldGenerator);
+                    chunks.Add(viewedChunkCoord, chunk);
                 }
             }
         }
@@ -116,15 +76,30 @@ public class EndlessTerrain : MonoBehaviour
 
     public class TerrainChunk
     {
-        private GameObject meshObject;
+        private const int maxChunksPerFrame = 2;
+        
+        private GameObject currentTerrainObject;
+        private GameObject lastTerrainObject;
         private Vector2 position;
         private Bounds bounds;
+        private GameObject[] terrainObjects;
+        private ConcurrentQueue<MeshInfo> meshInfoToProcess = new();
         
-        public TerrainChunk(Vector2 coord, int size, GameObject terrain)
+        public bool calculatingTerrain { get; private set; }
+        private WorldGenerator generator;
+
+        private int currentLOD = -1;
+        
+        // TODO: Change how this works. Weird to have two instances of lodDistances.
+        private LODInfo[] lodDistances;
+        
+        public TerrainChunk(Vector2 coord, int size, LODInfo[] lodDistances, WorldGenerator generator)
         {
             position = coord * size;
             bounds = new Bounds(position, Vector2.one * size);
-            meshObject = terrain;
+            terrainObjects = new GameObject[lodDistances.Length];
+            this.generator = generator;
+            this.lodDistances = lodDistances;
             
             SetVisible(false);
         }
@@ -132,19 +107,137 @@ public class EndlessTerrain : MonoBehaviour
         // Update visibility.
         public void UpdateChunk()
         {
+            bool done = true;
+            foreach (GameObject t in terrainObjects)
+            {
+                if (!t)
+                {
+                    done = false;
+                }
+
+                calculatingTerrain = done;
+            }
+
+            if (!calculatingTerrain)
+            {
+                GenerateTerrain();
+            }
+            
             float viewerDistance = Mathf.Sqrt(bounds.SqrDistance(viewerPosition));
             bool visible = viewerDistance <= viewDistance;
+            
             SetVisible(visible);
+
+            if (visible)
+            {
+                // Check which LOD we should display based on distance to player.
+                int lod = lodDistances.Length - 1;
+                for (int i = 0; i < lodDistances.Length; i++)
+                {
+                    if (viewerDistance <= lodDistances[i].visibleThreshold)
+                    {
+                        lod = i;
+                        break;
+                    }
+                }
+
+                // Mesh doesn't yet exist, so generate it in background.
+                if (!terrainObjects[lod])
+                { 
+                    meshInfoToProcess.Enqueue(generator.GenerateMeshInfo(position, lodDistances[lod].LOD));
+                    return;
+                }
+                currentTerrainObject = terrainObjects[lod];
+                
+                int highestAvailableLOD = lodDistances.Length - 1;
+                for (int i = 0; i <= lod; i++)
+                {
+                    if (terrainObjects[i])
+                    {
+                        highestAvailableLOD = i;
+                        break;
+                    }
+                }
+
+                // Display the currently highest available LOD.
+                if (currentLOD != highestAvailableLOD)
+                {
+                    currentLOD = highestAvailableLOD;
+                    currentTerrainObject = terrainObjects[currentLOD];
+                }
+            }
+        }
+        
+        private void GenerateTerrain()
+        {
+            int count = meshInfoToProcess.Count;
+            int processedChunks = 0;
+        
+            for (int i = 0; i < count && processedChunks < maxChunksPerFrame; i++)
+            {
+                if (meshInfoToProcess.TryDequeue(out MeshInfo meshInfo))
+                {
+                    if (meshInfo.vertexPosHandle.IsCompleted)
+                    {
+                        // Take a meshInfo from the queue and process it into a terrain object.
+                        GameObject terrain = generator.GenerateTerrain(meshInfo);
+                        terrain.SetActive(false);
+
+                        int lod = 0;
+                        
+                        for (int j = 0; j < lodDistances.Length; j++)
+                        {
+                            if (meshInfo.LOD == lodDistances[j].LOD)
+                            {
+                                lod = j;
+                            }
+                        }
+                        
+                        terrainObjects[lod] = terrain;
+                        processedChunks++;
+                    }
+                    else
+                    {
+                        // Place the chunk at the end of the queue to check next frame.
+                        meshInfoToProcess.Enqueue(meshInfo);
+                    }
+                }
+            }
         }
 
         public void SetVisible(bool visible)
         {
-            meshObject.SetActive(visible);
+            if (!currentTerrainObject)
+            {
+                return;
+            }
+            
+            if (currentTerrainObject != lastTerrainObject)
+            {
+                if (lastTerrainObject)
+                {
+                    lastTerrainObject.SetActive(false);
+                }
+                
+                lastTerrainObject = currentTerrainObject;
+            }
+            currentTerrainObject.SetActive(visible);
         }
 
         public bool IsVisible()
         {
-            return meshObject.activeSelf;
+            if (!currentTerrainObject)
+            {
+                return false;
+            }
+            return currentTerrainObject.activeSelf;
         }
+    }
+
+    [System.Serializable]
+    public struct LODInfo
+    {
+        public int LOD;
+        public float visibleThreshold;
     }
 }
