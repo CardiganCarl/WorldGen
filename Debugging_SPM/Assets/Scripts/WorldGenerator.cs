@@ -109,8 +109,8 @@ public class WorldGenerator : MonoBehaviour
             float u = x / XAmount;
             float v = y / YAmount;
             
-            float posX = x / SubDivisions * LevelOfDetail;
-            float posY = y / SubDivisions * LevelOfDetail;
+            float posX = (x * LevelOfDetail) / SubDivisions;
+            float posY = (y * LevelOfDetail) / SubDivisions;
             
             // Assign vertex position with calculated fBM height.
             Vertices[index] = new float3(posX, FractalNoise.CalculateNoise(posX, posY, Seed, Frequency, Octaves, Offset) * Amplitude, posY);
